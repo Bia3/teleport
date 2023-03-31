@@ -119,7 +119,7 @@ The Discovery Service's service account will require the following permissions:
 
 In order to register GCP virtual machines, a new `gcp` join method will be
 created. The `gcp` join method will be
-an oidc-based join method like `github`, `kubernetes`, etc. The token will be fetched from the VM's
+an oidc-based join method like `github`, `circleci`, etc. The token will be fetched from the VM's
 instance metadata, with the audience claim set to the name of the Teleport
 cluster. The rest of the registration process will be identical to that of the
 [other oidc join methods](https://github.com/gravitational/teleport/blob/master/rfd/0079-oidc-joining.md#auth-server-support).
@@ -252,22 +252,22 @@ limiting one is `compute.instances.setMetadata`.
 ```json
 {
   "aud": "teleport.example.com",
-  "azp": "<>",
-  "email": "<>-compute@developer.gserviceaccount.com",
+  "azp": "<...>",
+  "email": "<...>-compute@developer.gserviceaccount.com",
   "email_verified": true,
   "exp": 1680121810,
   "google": {
     "compute_engine": {
       "instance_creation_timestamp": 1680117502,
-      "instance_id": "<>",
-      "instance_name": "<>",
-      "project_id": "<>",
+      "instance_id": "<...>",
+      "instance_name": "<...>",
+      "project_id": "<...>",
       "project_number": 12345678,
-      "zone": "<>"
+      "zone": "<...>"
     }
   },
   "iat": 1680118210,
   "iss": "https://accounts.google.com",
-  "sub": "<>"
+  "sub": "<...>"
 }
 ```
