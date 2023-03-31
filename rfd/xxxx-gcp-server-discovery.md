@@ -7,14 +7,18 @@ state: draft
 
 ## Required Approvers
 
+Engineering: @jakule && @r0mant
+Product: @klizhentas && @xinding33
+Security: @reedloden
+
 ## What
 
 Teleport discovery services will be able to automatically discover and enroll GCP virtual machine
 instances.
 
-link to ec2 and azure join
-
 ## Why
+
+This change will bring GCP auto-joining capabilities in line with EC2 and Azure.
 
 ## Details
 
@@ -27,8 +31,8 @@ discovery_service:
   enabled: 'yes'
   gcp:
     - types: ['vm']
-      project_ids: []
-      locations: []
+      project_ids: ['<project-id>']
+      locations: ['<location>']
       tags:
         'teleport': 'yes'
       install:
@@ -58,8 +62,8 @@ by specifying a node name in the join params.
       "teleport.internal/discovered-by": "<discovered-node-uuid>",
       "teleport.internal/origin": "cloud",
       "teleport.internal/zone": "<zone>",
-      "teleport.internal/projectId": "88888888-8888-8888-8888-888888888888",
-      "teleport.internal/instanceId": ""
+      "teleport.internal/projectId": "<project-id>",
+      "teleport.internal/instanceId": "<instance-id>"
     }
   },
   "spec": {
@@ -89,7 +93,7 @@ spec:
     echo "deb [signed-by=... stable main" | tee ... > /dev/null
     apt-get update
     apt-get install teleport
-    teleport node configure --auth-agent=... --join-method=gcp --token-name=azure-token
+    teleport node configure --auth-agent=... --join-method=gcp --token-name=gcp-token
   # Any resource in Teleport can automatically expire.
   expires: 0001-01-01T00:00:00Z
 ```
@@ -118,7 +122,7 @@ created. The `gcp` join method will be
 an oidc-based join method like `github`, `kubernetes`, etc. The token will be fetched from the VM's
 instance metadata, with the audience claim set to the name of the Teleport
 cluster. The rest of the registration process will be identical to that of the
-[other oidc join methods](link to oidc rfd).
+[other oidc join methods](https://github.com/gravitational/teleport/blob/master/rfd/0079-oidc-joining.md#auth-server-support).
 
 The joining VM will need a [service account](https://cloud.google.com/compute/docs/access/create-enable-service-accounts-for-instances)
 assigned to it to be able to generate id tokens. No permissions on the account
@@ -144,6 +148,9 @@ spec:
         # any location are allowed.
         locations: ['l1', 'l2']
 ```
+
+The `google.compute_engine.project_id` and `google.compute_engine.zone` JWT
+claims will be mapped to configuration values.
 
 teleport.yaml on the nodes should be configured so that they will use the GCP
 join token:
@@ -212,7 +219,7 @@ discovery_service:
         # Use default values
 ```
 
-custom role for discovery service
+Permissions required for the Discovery Service:
 
 ```yaml
 title: teleport_vm_discovery
@@ -224,14 +231,43 @@ includedPermissions:
   - compute.instances.list
 ```
 
-```text
-gcloud iam roles create ROLE_ID --project=PROJECT_ID \
-    --file=YAML_FILE_PATH
-```
-
 ## Security considerations
 
-- no ssm to separate permissions for creating/updating commands
-- no "run command" operation (and no dedicated permission)
+Automatic EC2 joining uses SSM to separate permission to create/update commands
+from permission to call them. GCP does not have an SSM-like service, so the
+discovery service will require permission to both create and execute commands.
+
+GCP does not have a dedicated "Run command" API; commands on VMs are instead
+executed over SSH, with access managed with keys in the VM's
+metadata. There is no permission specifically for running commands; the most
+limiting one is `compute.instances.setMetadata`.
+
+## Links
+
+- [Verifying GCP VM Identity](https://cloud.google.com/compute/docs/instances/verifying-instance-identity)
+- [SSH on GCP VMs](https://cloud.google.com/compute/docs/instances/ssh#third-party-tools)
 
 ## Appendix I - Example ID token payload
+
+```json
+{
+  "aud": "teleport.example.com",
+  "azp": "<>",
+  "email": "<>-compute@developer.gserviceaccount.com",
+  "email_verified": true,
+  "exp": 1680121810,
+  "google": {
+    "compute_engine": {
+      "instance_creation_timestamp": 1680117502,
+      "instance_id": "<>",
+      "instance_name": "<>",
+      "project_id": "<>",
+      "project_number": 12345678,
+      "zone": "<>"
+    }
+  },
+  "iat": 1680118210,
+  "iss": "https://accounts.google.com",
+  "sub": "<>"
+}
+```
