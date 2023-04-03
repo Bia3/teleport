@@ -120,8 +120,11 @@ The Discovery Service's service account will require the following permissions:
 In order to register GCP virtual machines, a new `gcp` join method will be
 created. The `gcp` join method will be
 an oidc-based join method like `github`, `circleci`, etc. The token will be fetched from the VM's
-instance metadata, with the audience claim set to the name of the Teleport
-cluster. The rest of the registration process will be identical to that of the
+instance metadata at the internal URL
+`http://metadata/computeMetadata/v1/instance/service-accounts/default/identity?audience=AUDIENCE&format=FORMAT&licenses=LICENSES`,
+with the audience claim set to the name of the Teleport cluster. The issuer
+will always be `https://accounts.google.com`. The rest of the registration
+process will be identical to that of the
 [other oidc join methods](https://github.com/gravitational/teleport/blob/master/rfd/0079-oidc-joining.md#auth-server-support).
 
 The joining VM will need a [service account](https://cloud.google.com/compute/docs/access/create-enable-service-accounts-for-instances)
@@ -144,9 +147,15 @@ spec:
     allow:
       # IDs of projects from which nodes can join. At least one required.
       - project_ids: ['p1', 'p2']
-        # Location from which nodes can join. If empty or omitted, nodes from
-        # any location are allowed.
+        # Regions and/or zones from which nodes can join. If empty or omitted,
+        # nodes from any location are allowed.
         locations: ['l1', 'l2']
+        # Emails associated with service accounts assigned to joining nodes. If
+        # empty or omitted, nodes with any email are allowed.
+        emails: ['e1@example.com', 'e2@example.com']
+        # Names of joining instances. If empty or omitted, nodes with any name
+        # are allowed.
+        instance_names: ['i1', 'i2']
 ```
 
 The `google.compute_engine.project_id` and `google.compute_engine.zone` JWT
@@ -230,6 +239,9 @@ includedPermissions:
   - compute.instances.get
   - compute.instances.list
 ```
+
+Teleport will retrieve GCP credentials in the same way that it already does for
+[GKE auto-discovery](https://goteleport.com/docs/kubernetes-access/discovery/google-cloud/#retrieve-credentials-for-your-teleport-services).
 
 ## Security considerations
 
