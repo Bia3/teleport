@@ -4456,8 +4456,7 @@ func (tc *TeleportClient) NewKubernetesServiceClient(ctx context.Context, cluste
 		Credentials: []client.Credentials{
 			client.LoadTLS(tlsConfig),
 		},
-		ALPNSNIAuthDialClusterName: clusterName,
-		IsALPNConnUpgradeRequired:  tc.IsALPNConnUpgradeRequired,
+		IsALPNConnUpgradeRequired: tc.IsALPNConnUpgradeRequired,
 	})
 	if err != nil {
 		return nil, trace.Wrap(err)
