@@ -19,14 +19,8 @@ following [Getting Started with Windows Access](getting-started.mdx).
 Continue with this guide if:
 
 - You're running an older version of Teleport and can't upgrade.
-<<<<<<< HEAD
-- You want to install the Desktop Service using the same instance of `teleport` running the proxy/auth services.
-||||||| parent of c0d694ca39 (update formatting)
-- You want to install Desktop Access using the same instance of `teleport` running the proxy/auth services.
-=======
 - You want to install Desktop Access using the same instance of `teleport`
   running the proxy/auth services.
->>>>>>> c0d694ca39 (update formatting)
 
 </Admonition>
 
@@ -40,21 +34,33 @@ This guide requires you to have:
 
 - Access to a Domain Controller
 
-- An existing Teleport cluster with one of the following versions:
+(!docs/pages/includes/edition-prereqs-tabs.mdx!)
 
-  **Open Source or Enterprise:** version 8.0 or newer
+  <Details
+    title="Version warning"
+    opened={true}
+    scope={["oss", "enterprise"]}
+    scopeOnly={true}
+    min="8.0"
+  >
+    Desktop Access is available in starting from Teleport `8`.
+  </Details>
 
-  **Teleport Cloud:** version 9.0 or newer
+  <Details
+    title="Version warning"
+    opened={true}
+    scope={["cloud"]}
+    scopeOnly={true}
+    min="9.0"
+  >
+    Desktop Access is available in starting from Teleport Cloud version 9.
+  </Details>
 
-  See [Teleport Getting Started](../try-out-teleport/introduction.mdx) if you're new to Teleport.
-
-- A Linux server to run the Teleport Desktop Service on.
+- A Linux server to run the Teleport Desktop service on.
 
   You can reuse an existing server running any other Teleport instance.
 
-- The `tctl` administration tool version >= (=teleport.version=)
-
-  (!docs/pages/includes/tctl.mdx!)
+- (!docs/pages/includes/tctl.mdx!)
 
 ## Step 1/7. Create a restrictive service account
 
