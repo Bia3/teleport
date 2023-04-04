@@ -32,16 +32,16 @@ import (
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api/types"
 	apievents "github.com/gravitational/teleport/api/types/events"
+	"github.com/gravitational/teleport/lib/backend"
 	"github.com/gravitational/teleport/lib/events"
 	"github.com/gravitational/teleport/lib/session"
 	"github.com/gravitational/teleport/lib/utils"
 )
 
 const (
-	// TODO(tobiaszheller): move to batcher.go in other PR.
-	// maxWaitTimeOnReceiveMessageFromSQS defines how long single
-	// receiveFromQueue will wait if there is no max events (10).
-	maxWaitTimeOnReceiveMessageFromSQS = 5 * time.Second
+	payloadTypeAttr          = "payload_type"
+	payloadTypeRawProtoEvent = "raw_proto_event"
+	payloadTypeS3Based       = "s3_based_payload"
 )
 
 // Config structure represents Athena configuration.
@@ -291,10 +291,12 @@ type Log struct {
 	Config
 
 	awsConfig aws.Config
+
+	consumerStop context.CancelFunc
 }
 
 // New creates an instance of an Athena based audit log.
-func New(ctx context.Context, cfg Config) (*Log, error) {
+func New(ctx context.Context, cfg Config, backend backend.Backend) (*Log, error) {
 	err := cfg.CheckAndSetDefaults()
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -318,8 +320,17 @@ func New(ctx context.Context, cfg Config) (*Log, error) {
 	}
 
 	// TODO(tobiaszheller): initialize publisher
-	// TODO(tobiaszheller): initialize batcher
 	// TODO(tobiaszheller): initialize querier
+
+	consumer, err := newConsumer(cfg, l.awsConfig, backend, logEntry)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	consumerCtx, consumerCancel := context.WithCancel(ctx)
+	l.consumerStop = consumerCancel
+
+	go consumer.run(consumerCtx)
 
 	return l, nil
 }
@@ -345,6 +356,7 @@ func (l *Log) SearchSessionEvents(fromUTC, toUTC time.Time, limit int, order typ
 }
 
 func (l *Log) Close() error {
+	l.consumerStop()
 	return nil
 }
 

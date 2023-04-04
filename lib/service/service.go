@@ -1365,7 +1365,7 @@ func initAuthExternalAuditLog(ctx context.Context, auditConfig types.ClusterAudi
 			if err != nil {
 				return nil, trace.Wrap(err)
 			}
-			logger, err := athena.New(ctx, cfg)
+			logger, err := athena.New(ctx, cfg, backend)
 			if err != nil {
 				return nil, trace.Wrap(err)
 			}
