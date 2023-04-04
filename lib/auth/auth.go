@@ -4385,8 +4385,8 @@ func (a *Server) isMFARequired(ctx context.Context, checker services.AccessCheck
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
-		var matches []types.Server
-		for _, n := range nodes {
+
+		matchNode := func(n types.Server) bool {
 			// Get the server address without port number.
 			addr, _, err := net.SplitHostPort(n.GetAddr())
 			if err != nil {
@@ -4394,6 +4394,24 @@ func (a *Server) isMFARequired(ctx context.Context, checker services.AccessCheck
 			}
 			// Match NodeName to UUID, hostname or self-reported server address.
 			if n.GetName() == t.Node.Node || n.GetHostname() == t.Node.Node || addr == t.Node.Node {
+				return true
+			}
+			// Match other known public addresses.
+			for _, addr := range n.GetPublicAddrs() {
+				// Get the server address without port number.
+				if host, _, err := net.SplitHostPort(addr); err == nil {
+					addr = host
+				}
+				if t.Node.Node == addr {
+					return true
+				}
+			}
+			return false
+		}
+
+		var matches []types.Server
+		for _, n := range nodes {
+			if matchNode(n) {
 				matches = append(matches, n)
 			}
 		}

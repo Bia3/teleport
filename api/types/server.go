@@ -49,8 +49,10 @@ type Server interface {
 	GetCmdLabels() map[string]CommandLabel
 	// SetCmdLabels sets command labels.
 	SetCmdLabels(cmdLabels map[string]CommandLabel)
-	// GetPublicAddr is an optional field that returns the public address this cluster can be reached at.
+	// GetPublicAddr returns the public address where this server can be reached.
 	GetPublicAddr() string
+	// GetPublicAddrs returns the public addresses where this server can be reached.
+	GetPublicAddrs() []string
 	// GetRotation gets the state of certificate authority rotation.
 	GetRotation() Rotation
 	// SetRotation sets the state of certificate authority rotation.
@@ -63,8 +65,10 @@ type Server interface {
 	String() string
 	// SetAddr sets server address
 	SetAddr(addr string)
-	// SetPublicAddr sets the public address this cluster can be reached at.
+	// SetPublicAddr sets the public address where this server can be reached.
 	SetPublicAddr(string)
+	// SetPublicAddrs sets the public addresses where this server can be reached.
+	SetPublicAddrs([]string)
 	// SetNamespace sets server namespace
 	SetNamespace(namespace string)
 	// GetApps gets the list of applications this server is proxying.
@@ -178,9 +182,14 @@ func (s *ServerV2) Expiry() time.Time {
 	return s.Metadata.Expiry()
 }
 
-// SetPublicAddr sets the public address this cluster can be reached at.
+// SetPublicAddr sets the public address where this server can be reached.
 func (s *ServerV2) SetPublicAddr(addr string) {
 	s.Spec.PublicAddr = addr
+}
+
+// SetPublicAddrs sets the public proxy addresses where this server can be reached.
+func (s *ServerV2) SetPublicAddrs(addrs []string) {
+	s.Spec.PublicAddrs = addrs
 }
 
 // GetName returns server name
@@ -198,9 +207,14 @@ func (s *ServerV2) GetAddr() string {
 	return s.Spec.Addr
 }
 
-// GetPublicAddr is an optional field that returns the public address this cluster can be reached at.
+// GetPublicAddr returns the public address where this server can be reached.
 func (s *ServerV2) GetPublicAddr() string {
 	return s.Spec.PublicAddr
+}
+
+// GetPublicAddrs returns the public addresses where this server can be reached.
+func (s *ServerV2) GetPublicAddrs() []string {
+	return s.Spec.PublicAddrs
 }
 
 // GetRotation gets the state of certificate authority rotation.

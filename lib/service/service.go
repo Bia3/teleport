@@ -2394,6 +2394,7 @@ func (process *TeleportProcess) initSSH() error {
 			regular.SetTracerProvider(process.TracingProvider),
 			regular.SetSessionController(sessionController),
 			regular.SetCAGetter(caGetter),
+			regular.SetPublicAddrs(cfg.SSH.PublicAddrs),
 		)
 		if err != nil {
 			return trace.Wrap(err)
@@ -3835,6 +3836,7 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 		regular.SetSessionController(sessionController),
 		regular.SetIngressReporter(ingress.SSH, ingressReporter),
 		regular.SetPROXYSigner(proxySigner),
+		regular.SetPublicAddrs(cfg.SSH.PublicAddrs),
 	)
 	if err != nil {
 		return trace.Wrap(err)

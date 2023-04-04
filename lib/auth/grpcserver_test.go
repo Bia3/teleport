@@ -56,6 +56,7 @@ import (
 	"github.com/gravitational/teleport/api/observability/tracing"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/api/types/installers"
+	"github.com/gravitational/teleport/api/utils"
 	apiutils "github.com/gravitational/teleport/api/utils"
 	"github.com/gravitational/teleport/api/utils/sshutils"
 	"github.com/gravitational/teleport/lib/auth/mocku2f"
@@ -1590,7 +1591,7 @@ func TestIsMFARequired(t *testing.T) {
 		Kind:    types.KindNode,
 		Version: types.V2,
 		Metadata: types.Metadata{
-			Name: "node-a",
+			Name: uuid.NewString(),
 		},
 		Spec: types.ServerSpecV2{
 			Hostname: "node-a",
@@ -1617,6 +1618,7 @@ func TestIsMFARequired(t *testing.T) {
 		require.NoError(t, err)
 
 		for _, roleRequireMFAType := range requireMFATypes {
+			roleRequireMFAType := roleRequireMFAType
 			// If role or auth pref have "hardware_key_touch", expect not required.
 			expectRequired := !(roleRequireMFAType == types.RequireMFAType_HARDWARE_KEY_TOUCH || authPrefRequireMFAType == types.RequireMFAType_HARDWARE_KEY_TOUCH)
 			// Otherwise, if auth pref or role require session MFA, expect required.
@@ -1731,6 +1733,110 @@ func TestIsMFARequiredUnauthorized(t *testing.T) {
 	// When unauthorized, expect a silent `false`.
 	require.NoError(t, err)
 	require.False(t, resp.Required)
+}
+
+func TestIsMFARequired_NodeMatch(t *testing.T) {
+	modules.SetTestModules(t, &modules.TestModules{TestBuildType: modules.BuildEnterprise})
+
+	ctx := context.Background()
+	srv := newTestTLSServer(t)
+
+	// Register an SSH node.
+	node := &types.ServerV2{
+		Kind:    types.KindNode,
+		Version: types.V2,
+		Metadata: types.Metadata{
+			Name: uuid.NewString(),
+		},
+		Spec: types.ServerSpecV2{
+			Hostname:    "node-a",
+			Addr:        "127.0.0.1:3022",
+			PublicAddrs: []string{"node.example.com", "localhost:3022"},
+		},
+	}
+	_, err := srv.Auth().UpsertNode(ctx, node)
+	require.NoError(t, err)
+
+	// Create a fake user with per session mfa required for all nodes.
+	role, err := CreateRole(ctx, srv.Auth(), "mfa-user", types.RoleSpecV6{
+		Options: types.RoleOptions{
+			RequireMFAType: types.RequireMFAType_SESSION,
+		},
+		Allow: types.RoleConditions{
+			Logins:     []string{"mfa-user"},
+			NodeLabels: types.Labels{types.Wildcard: utils.Strings{types.Wildcard}},
+		},
+	})
+	require.NoError(t, err)
+
+	user, err := CreateUser(srv.Auth(), "mfa-user", role)
+	require.NoError(t, err)
+
+	cl, err := srv.NewClient(TestUser(user.GetName()))
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		desc  string
+		node  string
+		match bool
+	}{
+		{
+			desc:  "OK uuid",
+			node:  node.GetName(),
+			match: true,
+		},
+		{
+			desc:  "OK host name",
+			node:  node.GetHostname(),
+			match: true,
+		},
+		{
+			desc:  "OK addr",
+			node:  node.GetAddr(),
+			match: true,
+		},
+		{
+			desc:  "OK public addr 1",
+			node:  node.GetPublicAddrs()[0],
+			match: true,
+		},
+		{
+			desc:  "OK public addr 2",
+			node:  node.GetPublicAddrs()[1],
+			match: true,
+		},
+		{
+			desc:  "NOK unknown ip",
+			node:  "1.2.3.4",
+			match: false,
+		},
+		{
+			desc:  "NOK unknown addr",
+			node:  "unknown.example.com",
+			match: false,
+		},
+	} {
+		tc := tc
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+			// IsMFARequired only expects a host name or ip without the port.
+			if host, _, err := net.SplitHostPort(tc.node); err == nil {
+				tc.node = host
+			}
+			resp, err := cl.IsMFARequired(ctx, &proto.IsMFARequiredRequest{
+				Target: &proto.IsMFARequiredRequest_Node{Node: &proto.NodeLogin{
+					Login: user.GetName(),
+					Node:  tc.node,
+				}},
+			})
+			require.NoError(t, err)
+			if tc.match {
+				require.True(t, resp.Required)
+			} else {
+				require.False(t, resp.Required)
+			}
+		})
+	}
 }
 
 // TestRoleVersions tests that downgraded V6 roles are returned to older
