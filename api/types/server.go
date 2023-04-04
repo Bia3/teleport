@@ -49,9 +49,9 @@ type Server interface {
 	GetCmdLabels() map[string]CommandLabel
 	// SetCmdLabels sets command labels.
 	SetCmdLabels(cmdLabels map[string]CommandLabel)
-	// GetPublicAddr returns the public address where this server can be reached.
+	// GetPublicAddrs returns a public address where this server can be reached.
 	GetPublicAddr() string
-	// GetPublicAddrs returns the public addresses where this server can be reached.
+	// GetPublicAddrs returns a list of public addresses where this server can be reached.
 	GetPublicAddrs() []string
 	// GetRotation gets the state of certificate authority rotation.
 	GetRotation() Rotation
@@ -65,8 +65,6 @@ type Server interface {
 	String() string
 	// SetAddr sets server address
 	SetAddr(addr string)
-	// SetPublicAddr sets the public address where this server can be reached.
-	SetPublicAddr(string)
 	// SetPublicAddrs sets the public addresses where this server can be reached.
 	SetPublicAddrs([]string)
 	// SetNamespace sets server namespace
@@ -182,11 +180,6 @@ func (s *ServerV2) Expiry() time.Time {
 	return s.Metadata.Expiry()
 }
 
-// SetPublicAddr sets the public address where this server can be reached.
-func (s *ServerV2) SetPublicAddr(addr string) {
-	s.Spec.PublicAddr = addr
-}
-
 // SetPublicAddrs sets the public proxy addresses where this server can be reached.
 func (s *ServerV2) SetPublicAddrs(addrs []string) {
 	s.Spec.PublicAddrs = addrs
@@ -207,12 +200,15 @@ func (s *ServerV2) GetAddr() string {
 	return s.Spec.Addr
 }
 
-// GetPublicAddr returns the public address where this server can be reached.
+// GetPublicAddr returns a public address where this server can be reached.
 func (s *ServerV2) GetPublicAddr() string {
-	return s.Spec.PublicAddr
+	if len(s.Spec.PublicAddrs) != 0 {
+		return s.Spec.PublicAddrs[0]
+	}
+	return ""
 }
 
-// GetPublicAddrs returns the public addresses where this server can be reached.
+// GetPublicAddrs returns a list of public addresses where this server can be reached.
 func (s *ServerV2) GetPublicAddrs() []string {
 	return s.Spec.PublicAddrs
 }
@@ -411,6 +407,12 @@ func (s *ServerV2) CheckAndSetDefaults() error {
 		return trace.BadParameter(`server SubKind must only be set when Kind is "node"`)
 	}
 
+	// DELETE IN 14.0. (Joerger) PublicAddr deprecated in favor of PublicAddrs
+	if len(s.Spec.PublicAddrs) == 0 && s.Spec.PublicAddr != "" {
+		s.Spec.PublicAddrs = []string{s.Spec.PublicAddr}
+		s.Spec.PublicAddr = ""
+	}
+
 	switch s.SubKind {
 	case "", SubKindTeleportNode:
 		// allow but do nothing
@@ -418,8 +420,8 @@ func (s *ServerV2) CheckAndSetDefaults() error {
 		if s.Spec.Addr == "" {
 			return trace.BadParameter(`Addr must be set when server SubKind is "openssh"`)
 		}
-		if s.Spec.PublicAddr != "" {
-			return trace.BadParameter(`PublicAddr must not be set when server SubKind is "openssh"`)
+		if len(s.Spec.PublicAddrs) != 0 {
+			return trace.BadParameter(`PublicAddrs must not be set when server SubKind is "openssh"`)
 		}
 		if s.Spec.Hostname == "" {
 			return trace.BadParameter(`Hostname must be set when server SubKind is "openssh"`)

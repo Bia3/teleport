@@ -2332,7 +2332,7 @@ var xxx_messageInfo_ServerV2List proto.InternalMessageInfo
 type ServerSpecV2 struct {
 	// Addr is a host:port address where this server can be reached.
 	Addr string `protobuf:"bytes,1,opt,name=Addr,proto3" json:"addr"`
-	// PublicAddr is the public address where this cluster can be reached.
+	// PublicAddr is the public address where this server can be reached.
 	// DELETE IN 14.0. (joerger) Deprecated in favor of public_addrs.
 	PublicAddr string `protobuf:"bytes,2,opt,name=PublicAddr,proto3" json:"public_addr,omitempty"`
 	// Hostname is server hostname

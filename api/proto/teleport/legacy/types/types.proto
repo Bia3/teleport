@@ -706,7 +706,7 @@ message ServerSpecV2 {
 
   // Addr is a host:port address where this server can be reached.
   string Addr = 1 [(gogoproto.jsontag) = "addr"];
-  // PublicAddr is the public address where this cluster can be reached.
+  // PublicAddr is the public address where this server can be reached.
   // DELETE IN 14.0. (joerger) Deprecated in favor of public_addrs.
   string PublicAddr = 2 [(gogoproto.jsontag) = "public_addr,omitempty"];
   // Hostname is server hostname
