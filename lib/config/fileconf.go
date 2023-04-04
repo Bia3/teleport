@@ -1014,6 +1014,9 @@ type PluginService struct {
 
 	// Plugins is a map of matchers for enabled plugin resources.
 	Plugins map[string]string `yaml:"plugins,omitempty"`
+
+	// Opsgenie represents the opsgenie plugin specific configuration.
+	Opsgenie Opsgenie `yaml:"opsgenie,omitempty"`
 }
 
 // Opsgenie represents the configuration for the Opsgenie plugin.
