@@ -1,5 +1,5 @@
 /*
-Copyright 2022 Gravitational, Inc.
+Copyright 2023 Gravitational, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package githubactions
+package gcp
 
 import (
 	"context"
@@ -28,16 +28,9 @@ import (
 )
 
 type IDTokenValidatorConfig struct {
-	// Clock is used by the validator when checking expiry and issuer times of
-	// tokens. If omitted, a real clock will be used.
-	Clock clockwork.Clock
-	// GitHubIssuerHost is the host of the Issuer for tokens issued by
-	// GitHub's cloud hosted version. If no GHESHost override is provided to
-	// the call to Validate, then this will be used as the host.
-	GitHubIssuerHost string
-	// insecure configures the validator to use HTTP rather than HTTPS. This
-	// is not exported as this is only used in the test for now.
-	insecure bool
+	Clock      clockwork.Clock
+	IssuerHost string
+	insecure   bool
 }
 
 type IDTokenValidator struct {
@@ -45,39 +38,30 @@ type IDTokenValidator struct {
 }
 
 func NewIDTokenValidator(cfg IDTokenValidatorConfig) *IDTokenValidator {
-	if cfg.GitHubIssuerHost == "" {
-		cfg.GitHubIssuerHost = DefaultIssuerHost
-	}
 	if cfg.Clock == nil {
 		cfg.Clock = clockwork.NewRealClock()
 	}
-
+	if cfg.IssuerHost == "" {
+		cfg.IssuerHost = DefaultIssuerHost
+	}
 	return &IDTokenValidator{
 		IDTokenValidatorConfig: cfg,
 	}
 }
 
-func (id *IDTokenValidator) issuerURL(GHESHost string) string {
+func (id *IDTokenValidator) issuerURL() string {
 	scheme := "https"
 	if id.insecure {
 		scheme = "http"
 	}
-
-	if GHESHost == "" {
-		return fmt.Sprintf("%s://%s", scheme, id.GitHubIssuerHost)
-	}
-	return fmt.Sprintf("%s://%s/_services/token", scheme, GHESHost)
+	return fmt.Sprintf("%s://%s", scheme, id.IssuerHost)
 }
 
-func (id *IDTokenValidator) Validate(ctx context.Context, GHESHost string, token string) (*IDTokenClaims, error) {
-	p, err := oidc.NewProvider(
-		ctx,
-		id.issuerURL(GHESHost),
-	)
+func (id *IDTokenValidator) Validate(ctx context.Context, token string) (*IDTokenClaims, error) {
+	p, err := oidc.NewProvider(ctx, id.issuerURL())
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-
 	verifier := p.Verifier(&oidc.Config{
 		ClientID: "teleport.cluster.local",
 		Now:      id.Clock.Now,
