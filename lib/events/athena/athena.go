@@ -291,6 +291,8 @@ type Log struct {
 	Config
 
 	awsConfig aws.Config
+
+	querier *querier
 }
 
 // New creates an instance of an Athena based audit log.
@@ -319,7 +321,14 @@ func New(ctx context.Context, cfg Config) (*Log, error) {
 
 	// TODO(tobiaszheller): initialize publisher
 	// TODO(tobiaszheller): initialize batcher
-	// TODO(tobiaszheller): initialize querier
+
+	l.querier = newQuerier(querierConfig{
+		tablename:               cfg.TableName,
+		database:                cfg.Database,
+		workgroup:               cfg.Workgroup,
+		queryResultsS3:          cfg.QueryResultsS3,
+		getQueryResultsInterval: cfg.GetQueryResultsInterval,
+	}, l.awsConfig, logEntry)
 
 	return l, nil
 }
@@ -337,11 +346,11 @@ func (l *Log) GetSessionEvents(namespace string, sid session.ID, after int, incl
 }
 
 func (l *Log) SearchEvents(fromUTC, toUTC time.Time, namespace string, eventTypes []string, limit int, order types.EventOrder, startKey string) ([]apievents.AuditEvent, string, error) {
-	return nil, "", trace.NotImplemented("not implemented")
+	return l.querier.SearchEvents(fromUTC, toUTC, namespace, eventTypes, limit, order, startKey)
 }
 
 func (l *Log) SearchSessionEvents(fromUTC, toUTC time.Time, limit int, order types.EventOrder, startKey string, cond *types.WhereExpr, sessionID string) ([]apievents.AuditEvent, string, error) {
-	return nil, "", trace.NotImplemented("not implemented")
+	return l.querier.SearchSessionEvents(fromUTC, toUTC, limit, order, startKey, cond, sessionID)
 }
 
 func (l *Log) Close() error {
