@@ -197,7 +197,7 @@ type sqsMessagesCollector struct {
 // It runs until context is canceled (via timeout) or when maxItems is reached.
 // MaxItems is soft limit and can happen that it will return more items then MaxItems.
 func (s *sqsMessagesCollector) msgsFromQueue(ctx context.Context, eventsC chan<- eventAndAckID) {
-	// Errors should be immidietly process by error handling loop, so 10 size
+	// Errors should be immediately process by error handling loop, so 10 size
 	// should be enough to not cause blocking.
 	errorsC := make(chan error, 10)
 	defer close(errorsC)
