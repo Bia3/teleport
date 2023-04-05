@@ -161,7 +161,7 @@ func (c *consumer) singleBatch(ctx context.Context) error {
 		errHandlingFn: func(ctx context.Context, errC chan error) {
 			err := trace.NewAggregateFromChannel(errC, ctx)
 			if err != nil {
-				c.Entry.WithError(err).Errorf("Following errors happen during receiving/converting sqs message")
+				c.Entry.WithError(err).Error("Following errors happen during receiving/converting sqs message")
 			}
 		},
 	}
