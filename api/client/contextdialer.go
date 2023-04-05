@@ -39,6 +39,7 @@ import (
 type dialConfig struct {
 	tlsConfig               *tls.Config
 	alpnConnUpgradeRequired bool
+	alpnConnUpgradeWithPing bool
 }
 
 // WithInsecureSkipVerify specifies if dialing insecure when using an HTTPS proxy.
@@ -54,6 +55,13 @@ func WithInsecureSkipVerify(insecure bool) DialOption {
 func WithALPNConnUpgrade(alpnConnUpgradeRequired bool) DialOption {
 	return func(cfg *dialProxyConfig) {
 		cfg.alpnConnUpgradeRequired = alpnConnUpgradeRequired
+	}
+}
+
+// WithALPNConnUpgradePing specifies if Ping is required during ALPN connection upgrade.
+func WithALPNConnUpgradePing(alpnConnUpgradeWithPing bool) DialOption {
+	return func(cfg *dialProxyConfig) {
+		cfg.alpnConnUpgradeWithPing = alpnConnUpgradeWithPing
 	}
 }
 
@@ -129,7 +137,7 @@ func NewDialer(ctx context.Context, keepAlivePeriod, dialTimeout time.Duration, 
 
 		// Wrap with alpnConnUpgradeDialer if upgrade is required for TLS Routing.
 		if cfg.alpnConnUpgradeRequired {
-			dialer = newALPNConnUpgradeDialer(dialer, cfg.tlsConfig)
+			dialer = newALPNConnUpgradeDialer(dialer, cfg)
 		}
 
 		// Dial.
@@ -210,10 +218,7 @@ func newTLSRoutingTunnelDialer(ssh ssh.ClientConfig, params connectParams) Conte
 			DialTimeout:     params.cfg.DialTimeout,
 			KeepAlivePeriod: params.cfg.KeepAlivePeriod,
 			TLSConfig: &tls.Config{
-				NextProtos: []string{
-					ALPNProtocolWithPing(constants.ALPNSNIProtocolReverseTunnel),
-					constants.ALPNSNIProtocolReverseTunnel,
-				},
+				NextProtos:         []string{constants.ALPNSNIProtocolReverseTunnel},
 				InsecureSkipVerify: insecure,
 				ServerName:         host,
 			},

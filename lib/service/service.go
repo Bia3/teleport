@@ -3849,6 +3849,7 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 	}
 
 	tlscfg := serverTLSConfig.Clone()
+	setupTLSConfigClientCAsForCluster(tlscfg, accessPoint, clusterName)
 	tlscfg.ClientAuth = tls.RequireAndVerifyClientCert
 	if lib.IsInsecureDevMode() {
 		tlscfg.InsecureSkipVerify = true
@@ -4544,7 +4545,7 @@ func setupALPNRouter(listeners *proxyListeners, serverTLSConfig *tls.Config, cfg
 	router.Add(alpnproxy.HandlerDecs{
 		MatchFunc: alpnproxy.MatchByProtocol(alpncommon.ProtocolProxySSH),
 		Handler:   sshProxyListener.HandleConnection,
-		TLSConfig: alpncommon.AddNextProtos(serverTLSConfig.Clone(), alpncommon.ProtocolProxySSH),
+		TLSConfig: serverTLSConfig.Clone(),
 	})
 	listeners.ssh = sshProxyListener
 

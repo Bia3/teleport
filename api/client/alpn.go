@@ -120,6 +120,7 @@ func (d *ALPNDialer) DialContext(ctx context.Context, network, addr string) (net
 	dialer := NewDialer(ctx, d.cfg.DialTimeout, d.cfg.DialTimeout,
 		WithInsecureSkipVerify(d.cfg.TLSConfig.InsecureSkipVerify),
 		WithALPNConnUpgrade(d.cfg.ALPNConnUpgradeRequired),
+		WithALPNConnUpgradePing(shouldALPNConnUpgradeWithPing(tlsConfig)),
 	)
 
 	conn, err := dialer.DialContext(ctx, network, addr)
@@ -146,13 +147,18 @@ func DialALPN(ctx context.Context, addr string, cfg ALPNDialerConfig) (net.Conn,
 	return conn, trace.Wrap(err)
 }
 
-// ALPNSNIProtocolPingSuffix receives an ALPN protocol and returns it with the
-// Ping protocol suffix.
-func ALPNProtocolWithPing(protocol string) string {
-	return protocol + constants.ALPNSNIProtocolPingSuffix
-}
-
 // IsALPNPingProtocol checks if the provided protocol is suffixed with Ping.
 func IsALPNPingProtocol(protocol string) bool {
 	return strings.HasSuffix(protocol, constants.ALPNSNIProtocolPingSuffix)
+}
+
+func shouldALPNConnUpgradeWithPing(config *tls.Config) bool {
+	for _, proto := range config.NextProtos {
+		switch proto {
+		case constants.ALPNSNIProtocolReverseTunnel,
+			constants.ALPNSNIProtocolSSH:
+			return true
+		}
+	}
+	return false
 }

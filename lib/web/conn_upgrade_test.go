@@ -113,6 +113,39 @@ func TestHandlerConnectionUpgrade(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, expectedPayload, receive)
 	})
+
+	t.Run("upgraded to ALPN with Ping", func(t *testing.T) {
+		serverConn, clientConn := net.Pipe()
+		defer serverConn.Close()
+		defer clientConn.Close()
+
+		r, err := http.NewRequest("GET", "http://localhost/webapi/connectionupgrade", nil)
+		require.NoError(t, err)
+		r.Header.Add("Upgrade", "alpn-ping")
+
+		go func() {
+			// serverConn will be hijacked.
+			w := newResponseWriterHijacker(nil, serverConn)
+			_, err := h.connectionUpgrade(w, r, nil)
+			require.NoError(t, err)
+		}()
+
+		// Verify clientConn receives http.StatusSwitchingProtocols.
+		clientConnReader := bufio.NewReader(clientConn)
+		resp, err := http.ReadResponse(clientConnReader, r)
+		require.NoError(t, err)
+
+		// Always drain/close the body.
+		io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+
+		require.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode)
+
+		// Verify clientConn receives data sent by Config.ALPNHandler.
+		receive, err := clientConnReader.ReadString(byte('@'))
+		require.NoError(t, err)
+		require.Equal(t, expectedPayload, receive)
+	})
 }
 
 // responseWriterHijacker is a mock http.ResponseWriter that also serves a

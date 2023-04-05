@@ -143,15 +143,15 @@ func isALPNConnUpgradeRequiredByEnv(addr, envValue string) bool {
 // alpnConnUpgradeDialer makes an "HTTP" upgrade call to the Proxy Service then
 // tunnels the connection with this connection upgrade.
 type alpnConnUpgradeDialer struct {
-	dialer    ContextDialer
-	tlsConfig *tls.Config
+	dialer ContextDialer
+	cfg    dialConfig
 }
 
 // newALPNConnUpgradeDialer creates a new alpnConnUpgradeDialer.
-func newALPNConnUpgradeDialer(dialer ContextDialer, tlsConfig *tls.Config) ContextDialer {
+func newALPNConnUpgradeDialer(dialer ContextDialer, cfg dialConfig) ContextDialer {
 	return &alpnConnUpgradeDialer{
-		dialer:    dialer,
-		tlsConfig: tlsConfig,
+		dialer: dialer,
+		cfg:    cfg,
 	}
 }
 
@@ -165,7 +165,7 @@ func (d alpnConnUpgradeDialer) DialContext(ctx context.Context, network, addr st
 	}
 
 	// matching the behavior of tls.Dial
-	cfg := d.tlsConfig
+	cfg := d.cfg.tlsConfig
 	if cfg == nil {
 		cfg = &tls.Config{}
 	}
@@ -186,7 +186,7 @@ func (d alpnConnUpgradeDialer) DialContext(ctx context.Context, network, addr st
 		Host:   addr,
 		Scheme: "https",
 		Path:   constants.WebAPIConnUpgrade,
-	})
+	}, d.cfg.alpnConnUpgradeWithPing)
 	if err != nil {
 		defer tlsConn.Close()
 		return nil, trace.Wrap(err)
@@ -194,13 +194,15 @@ func (d alpnConnUpgradeDialer) DialContext(ctx context.Context, network, addr st
 	return tlsConn, nil
 }
 
-func upgradeConnThroughWebAPI(conn net.Conn, api url.URL) error {
+func upgradeConnThroughWebAPI(conn net.Conn, api url.URL, ping bool) error {
 	req, err := http.NewRequest(http.MethodGet, api.String(), nil)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	// For now, only "alpn" is supported.
+	if ping {
+		req.Header.Add(constants.WebAPIConnUpgradeHeader, constants.WebAPIConnUpgradeTypeALPNPing)
+	}
 	req.Header.Add(constants.WebAPIConnUpgradeHeader, constants.WebAPIConnUpgradeTypeALPN)
 
 	// Send the request and check if upgrade is successful.
