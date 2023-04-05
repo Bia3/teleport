@@ -225,7 +225,7 @@ func (s *sqsMessagesCollector) msgsFromQueue(ctx context.Context, eventsC chan<-
 				}
 
 				// If there is not enough time to process receiveMessage call
-				// we can return immidietly. It's added because if
+				// we can return immediately. It's added because if
 				// receiveMessages is canceled message is marked as not
 				// processed after VisibilitTimeout (equal to BatchInterval).
 				if deadline, ok := wokerCtx.Deadline(); ok && time.Until(deadline) <= s.config.waitOnReceiveDuration {
