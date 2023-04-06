@@ -87,6 +87,7 @@ type s3downloader interface {
 }
 
 func newConsumer(cfg Config, awsCfg aws.Config, backend backend.Backend, logEntry *log.Entry) (*consumer, error) {
+	// TODO(tobiaszheller): move this to Config.CheckAndSetDefaults.
 	u, err := url.Parse(cfg.LocationS3)
 	if err != nil {
 		return nil, trace.Wrap(err)
