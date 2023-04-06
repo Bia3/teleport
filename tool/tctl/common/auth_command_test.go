@@ -210,6 +210,7 @@ func TestAuthSignKubeconfig(t *testing.T) {
 						Enabled: false,
 					},
 				}},
+				testInsecureSkipVerify: true,
 			},
 			wantAddr:  "https://proxy-from-api.example.com:3060",
 			assertErr: require.NoError,
@@ -227,6 +228,7 @@ func TestAuthSignKubeconfig(t *testing.T) {
 						Enabled: false,
 					},
 				}},
+				testInsecureSkipVerify: true,
 			},
 			wantCluster: remoteCluster.GetMetadata().Name,
 			assertErr:   require.NoError,
@@ -244,6 +246,7 @@ func TestAuthSignKubeconfig(t *testing.T) {
 						Enabled: false,
 					},
 				}},
+				testInsecureSkipVerify: true,
 			},
 			assertErr: func(t require.TestingT, err error, _ ...interface{}) {
 				require.Error(t, err)
@@ -285,6 +288,7 @@ func TestAuthSignKubeconfig(t *testing.T) {
 						Enabled: false,
 					},
 				}},
+				testInsecureSkipVerify: true,
 			},
 			wantAddr:  "https://proxy-from-api.example.com:3080",
 			assertErr: require.NoError,

@@ -87,12 +87,14 @@ type AuthCommand struct {
 	authRotate   *kingpin.CmdClause
 	authLS       *kingpin.CmdClause
 	authCRL      *kingpin.CmdClause
+	// testInsecureSkipVerify is used to skip TLS verification during tests
+	// when connecting to the proxy ping address.
+	testInsecureSkipVerify bool
 }
 
 // Initialize allows TokenCommand to plug itself into the CLI parser
 func (a *AuthCommand) Initialize(app *kingpin.Application, config *servicecfg.Config) {
 	a.config = config
-
 	// operations with authorities
 	auth := app.Command("auth", "Operations with user and host certificate authorities (CAs)").Hidden()
 	a.authExport = auth.Command("export", "Export public cluster (CA) keys to stdout")
@@ -936,6 +938,7 @@ func (a *AuthCommand) checkProxyAddr(ctx context.Context, clusterAPI auth.Client
 				Context:   ctx,
 				ProxyAddr: addr,
 				Timeout:   5 * time.Second,
+				Insecure:  a.testInsecureSkipVerify,
 			},
 		)
 		if err != nil {
