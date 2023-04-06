@@ -123,6 +123,7 @@ func (rc *ResourceCommand) Initialize(app *kingpin.Application, config *servicec
 		types.KindSAMLIdPServiceProvider:  rc.createSAMLIdPServiceProvider,
 		types.KindDevice:                  rc.createDevice,
 		types.KindOktaImportRule:          rc.createOktaImportRule,
+		types.KindPlugin:                  rc.createPlugin,
 	}
 	rc.config = config
 
@@ -844,6 +845,18 @@ func (rc *ResourceCommand) createOktaImportRule(ctx context.Context, client auth
 		}
 	}
 	fmt.Printf("Okta import rule '%s' has been %s\n", importRule.GetName(), UpsertVerb(exists, rc.IsForced()))
+	return nil
+}
+
+func (rc *ResourceCommand) createPlugin(ctx context.Context, client auth.ClientI, raw services.UnknownResource) error {
+	plugin, err := services.UnmarshalPlugin(raw.Raw)
+	if err != nil {
+		fmt.Println(err)
+		return trace.Wrap(err)
+	}
+	if err := client.CreatePlugin(ctx, plugin); err != nil {
+		return trace.Wrap(err)
+	}
 	return nil
 }
 
