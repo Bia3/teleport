@@ -78,45 +78,6 @@ func (c *ClusterClient) SessionSSHConfig(ctx context.Context, user string, targe
 		return nil, trace.Wrap(MFARequiredUnknown(err))
 	}
 
-	params := ReissueParams{
-		NodeName:       nodeName(target.Addr),
-		RouteToCluster: target.Cluster,
-		MFACheck:       target.MFACheck,
-	}
-
-	// requiredCheck passed from param can be nil.
-	if target.MFACheck == nil {
-		check, err := c.AuthClient.IsMFARequired(ctx, params.isMFARequiredRequest(c.tc.HostLogin))
-		if err != nil {
-			return nil, trace.Wrap(MFARequiredUnknown(err))
-		}
-		target.MFACheck = check
-	}
-
-	if !target.MFACheck.Required {
-		log.Debug("MFA not required for access.")
-		// MFA is not required.
-		// SSH certs can be used without embedding the node name.
-		if params.usage() == proto.UserCertsRequest_SSH {
-			return sshConfig, nil
-		}
-
-		// All other targets need their name embedded in the cert for routing,
-		// fall back to non-MFA reissue.
-		key, err := c.reissueUserCerts(ctx, CertCacheKeep, params)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-
-		am, err := key.AsAuthMethod()
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-
-		sshConfig.Auth = []ssh.AuthMethod{am}
-		return sshConfig, nil
-	}
-
 	// Always connect to root for getting new credentials, but attempt to reuse
 	// the existing client if possible.
 	rootClusterName, err := key.RootClusterName()
@@ -125,7 +86,7 @@ func (c *ClusterClient) SessionSSHConfig(ctx context.Context, user string, targe
 	}
 
 	mfaClt := c
-	if params.RouteToCluster != rootClusterName {
+	if target.Cluster != rootClusterName {
 		jumpHosts := c.tc.JumpHosts
 		// In case of MFA connect to root teleport proxy instead of JumpHost to request
 		// MFA certificates.
@@ -141,7 +102,14 @@ func (c *ClusterClient) SessionSSHConfig(ctx context.Context, user string, targe
 	}
 
 	log.Debug("Attempting to issue a single-use user certificate with an MFA check.")
-	key, err = performMFACeremony(ctx, mfaClt, params, key)
+	key, err = performMFACeremony(ctx, mfaClt,
+		ReissueParams{
+			NodeName:       nodeName(target.Addr),
+			RouteToCluster: target.Cluster,
+			MFACheck:       target.MFACheck,
+		},
+		key,
+	)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -267,8 +235,11 @@ func (c *ClusterClient) prepareUserCertsRequest(params ReissueParams, key *Key) 
 		Usage:                 params.usage(),
 		Format:                c.tc.CertificateFormat,
 		RequesterName:         params.RequesterName,
+		SSHLogin:              c.tc.HostLogin,
 	}, nil
 }
+
+var mfaNotRequiredError = trace.AccessDenied("mfa is not required to access resource")
 
 // performMFACeremony runs the mfa ceremony to completion. If successful the returned
 // [Key] will be authorized to connect to the target.
@@ -316,6 +287,27 @@ func performMFACeremony(ctx context.Context, clt *ClusterClient, params ReissueP
 	if mfaChal == nil {
 		return nil, trace.BadParameter("server sent a %T on GenerateUserSingleUseCerts, expected MFAChallenge", resp.Response)
 	}
+
+	switch mfaChal.MFARequired {
+	case proto.MFARequired_MFA_REQUIRED_NO:
+		return nil, trace.Wrap(mfaNotRequiredError)
+	case proto.MFARequired_MFA_REQUIRED_UNSPECIFIED:
+		if params.MFACheck != nil && !params.MFACheck.Required {
+			return nil, trace.Wrap(mfaNotRequiredError)
+		}
+
+		check, err := clt.AuthClient.IsMFARequired(ctx, params.isMFARequiredRequest(clt.tc.HostLogin))
+		if err != nil {
+			return nil, trace.Wrap(MFARequiredUnknown(err))
+		}
+		if !check.Required {
+			return nil, trace.Wrap(mfaNotRequiredError)
+		}
+
+		params.MFACheck = check
+	case proto.MFARequired_MFA_REQUIRED_YES:
+	}
+
 	mfaResp, err := clt.tc.PromptMFAChallenge(ctx, clt.tc.WebProxyAddr, mfaChal, nil /* applyOpts */)
 	if err != nil {
 		return nil, trace.Wrap(err)
