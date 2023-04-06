@@ -39,7 +39,7 @@ func Test_consumer_msgsFromQueue(t *testing.T) {
 	c := &sqsMessagesCollector{
 		log: logrus.NewEntry(logrus.New()),
 		config: sqsCollectConfig{
-			sqsCli:                fq,
+			sqsReceiver:           fq,
 			waitOnReceiveDuration: 5 * time.Millisecond,
 			batchMaxItems:         20000,
 		},

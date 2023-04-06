@@ -53,7 +53,7 @@ const (
 // certain size or interval, and writes to s3 as parquet file.
 type consumer struct {
 	*log.Entry
-	sqsCli              sqsCli
+	sqsReceiver         sqsReceiver
 	backend             backend.Backend
 	storeLocationPrefix string
 	storeLocationBucket string
@@ -64,7 +64,7 @@ type consumer struct {
 }
 
 type sqsCollectConfig struct {
-	sqsCli            sqsCli
+	sqsReceiver       sqsReceiver
 	queueURL          string
 	payloadBucket     string
 	payloadDownloader s3downloader
@@ -78,7 +78,7 @@ type sqsCollectConfig struct {
 	batchMaxItems int
 }
 
-type sqsCli interface {
+type sqsReceiver interface {
 	ReceiveMessage(ctx context.Context, params *sqs.ReceiveMessageInput, optFns ...func(*sqs.Options)) (*sqs.ReceiveMessageOutput, error)
 }
 
@@ -100,15 +100,15 @@ func newConsumer(cfg Config, awsCfg aws.Config, backend backend.Backend, logEntr
 	sqsCli := sqs.NewFromConfig(awsCfg)
 	return &consumer{
 		Entry:               logEntry,
-		sqsCli:              sqsCli,
+		sqsReceiver:         sqsCli,
 		backend:             backend,
 		storeLocationPrefix: strings.TrimSuffix(strings.TrimPrefix(u.Path, "/"), "/"),
 		storeLocationBucket: u.Host,
 		batchMaxItems:       cfg.BatchMaxItems,
 		batchMaxInterval:    cfg.BatchMaxInterval,
 		collectConfig: sqsCollectConfig{
-			sqsCli:   sqsCli,
-			queueURL: cfg.QueueURL,
+			sqsReceiver: sqsCli,
+			queueURL:    cfg.QueueURL,
 			// TODO(tobiaszheller): use s3 manager from teleport observability.
 			payloadDownloader:     manager.NewDownloader(s3cli),
 			payloadBucket:         largeEventsURL.Host,
@@ -275,7 +275,7 @@ type sqsMessageWithError struct {
 
 func (s *sqsMessagesCollector) receiveMessages(ctx context.Context) ([]sqsMessageWithError, error) {
 	out := make([]sqsMessageWithError, 0, 10)
-	sqsOut, err := s.config.sqsCli.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
+	sqsOut, err := s.config.sqsReceiver.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
 		QueueUrl:              aws.String(s.config.queueURL),
 		MaxNumberOfMessages:   10,
 		WaitTimeSeconds:       s.config.waitOnReceiveTimeout,
