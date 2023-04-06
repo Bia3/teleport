@@ -135,6 +135,8 @@ func (c *consumer) run(ctx context.Context) {
 	lockTTL := c.batchMaxInterval / 2
 	var err error
 	for {
+		// TODO(tobiaszheller): come back at some point and rework configuration of runWhileLocked.
+		// Now it tries every 250ms to aquire lock which can cause pressure on backend.
 		err = backend.RunWhileLocked(ctx, c.backend, lockName, lockTTL, func(ctx context.Context) error {
 			return trace.Wrap(c.singleBatch(ctx))
 		})
