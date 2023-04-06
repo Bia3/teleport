@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-import { sortResults } from './useSearch';
 import {
-  makeResourceResult,
   makeServer,
   makeKube,
   makeLabelsList,
-} from './searchResultTestHelpers';
+} from 'teleterm/services/tshd/testHelpers';
+
+import { sortResults } from './useSearch';
+import { makeResourceResult } from './testHelpers';
 
 describe('sortResults', () => {
   it('uses the displayed resource name as the tie breaker if the scores are equal', () => {
