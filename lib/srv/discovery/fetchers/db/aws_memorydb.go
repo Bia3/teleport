@@ -209,3 +209,11 @@ func getMemoryDBResourceTags(ctx context.Context, client memorydbiface.MemoryDBA
 func (f *memoryDBFetcher) MatchingLabels() types.Labels {
 	return f.cfg.Labels
 }
+
+func (f *memoryDBFetcher) MatchesResource(r types.ResourceWithLabels) bool {
+	db, ok := r.(types.Database)
+	if !ok {
+		return false
+	}
+	return db.IsMemoryDB() && !db.GetAWS().IsEmpty()
+}

@@ -199,3 +199,11 @@ func (a *eksFetcher) getMatchingKubeCluster(ctx context.Context, clusterName str
 func (a *eksFetcher) MatchingLabels() types.Labels {
 	return a.FilterLabels
 }
+
+func (f *eksFetcher) MatchesResource(r types.ResourceWithLabels) bool {
+	kube, ok := r.(types.KubeCluster)
+	if !ok {
+		return false
+	}
+	return kube.IsAWS()
+}

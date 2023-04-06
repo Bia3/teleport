@@ -148,3 +148,11 @@ func (a *aksFetcher) String() string {
 func (a *aksFetcher) MatchingLabels() types.Labels {
 	return a.FilterLabels
 }
+
+func (f *aksFetcher) MatchesResource(r types.ResourceWithLabels) bool {
+	kube, ok := r.(types.KubeCluster)
+	if !ok {
+		return false
+	}
+	return kube.IsAzure()
+}

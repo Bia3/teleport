@@ -21,6 +21,7 @@ import (
 
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/cloud/azure"
+	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/srv/discovery/common"
 )
@@ -31,8 +32,7 @@ func newAzureMySQLFlexServerFetcher(config azureFetcherConfig) (common.Fetcher, 
 }
 
 // azureMySQLFlexServerFetcher implements azureFetcherPlugin for Azure MySQL Flexible server.
-type azureMySQLFlexServerFetcher struct {
-}
+type azureMySQLFlexServerFetcher struct{}
 
 // GetListClient returns a server-listing client for Azure MySQL Flexible server.
 func (f *azureMySQLFlexServerFetcher) GetListClient(cfg *azureFetcherConfig, subID string) (azure.MySQLFlexServersClient, error) {
@@ -81,4 +81,8 @@ func (f *azureMySQLFlexServerFetcher) isAvailable(server *armmysqlflexibleserver
 		state,
 		azure.StringVal(server.Name))
 	return true
+}
+
+func (f *azureMySQLFlexServerFetcher) MatchesResource(db types.Database) bool {
+	return db.GetType() == types.DatabaseTypeAzure && db.GetProtocol() == defaults.ProtocolMySQL
 }

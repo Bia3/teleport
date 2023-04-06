@@ -48,6 +48,9 @@ type azureFetcherPlugin[DBType comparable, ListClient azureListClient[DBType]] i
 	GetServerLocation(server DBType) string
 	// NewDatabaseFromServer creates a types.Database from provided server.
 	NewDatabaseFromServer(server DBType, log logrus.FieldLogger) types.Database
+	// MatchesResource returns true if the provided resource matches the fetcher's
+	// resource type.
+	MatchesResource(types.Database) bool
 }
 
 // newAzureFetcher returns a Azure DB server fetcher for the provided subscription, group, regions, and tags.
@@ -237,4 +240,13 @@ func (f *azureFetcher[DBType, ListClient]) String() string {
 // MatchingLabels returns the labels that the fetcher is matching.
 func (f *azureFetcher[DBType, ListClient]) MatchingLabels() types.Labels {
 	return f.cfg.Labels
+}
+
+func (f *azureFetcher[DBType, ListClient]) MatchesResource(r types.ResourceWithLabels) bool {
+	db, ok := r.(types.Database)
+	if !ok {
+		return false
+	}
+
+	return f.azureFetcherPlugin.MatchesResource(db)
 }

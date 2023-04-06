@@ -21,6 +21,7 @@ import (
 
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/cloud/azure"
+	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/srv/discovery/common"
 )
@@ -32,8 +33,7 @@ func newAzureManagedSQLServerFetcher(config azureFetcherConfig) (common.Fetcher,
 
 // azureManagedSQLServerFetcher implements azureFetcherPlugin for Azure Managed
 // SQL Servers.
-type azureManagedSQLServerFetcher struct {
-}
+type azureManagedSQLServerFetcher struct{}
 
 func (f *azureManagedSQLServerFetcher) GetListClient(cfg *azureFetcherConfig, subID string) (azure.ManagedSQLServerClient, error) {
 	client, err := cfg.AzureClients.GetAzureManagedSQLServerClient(subID)
@@ -89,4 +89,8 @@ func (f *azureManagedSQLServerFetcher) isAvailable(server *armsql.ManagedInstanc
 		)
 		return true
 	}
+}
+
+func (f *azureManagedSQLServerFetcher) MatchesResource(db types.Database) bool {
+	return db.GetType() == types.DatabaseTypeAzure && db.GetProtocol() == defaults.ProtocolSQLServer
 }

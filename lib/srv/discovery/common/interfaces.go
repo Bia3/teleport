@@ -30,6 +30,8 @@ type Fetcher interface {
 	MatchingLabels() types.Labels
 	// ResourceType identifies the resource type the fetcher is returning.
 	ResourceType() string
+	// ResourceSubType identifies the resource sub-type the fetcher is returning.
+	MatchesResource(types.ResourceWithLabels) bool
 	// Cloud returns the cloud the fetcher is operating.
 	Cloud() string
 }

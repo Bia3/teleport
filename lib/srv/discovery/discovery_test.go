@@ -971,6 +971,11 @@ func TestDiscoveryDatabase(t *testing.T) {
 				}, types.DatabaseSpecV3{
 					Protocol: "redis",
 					URI:      "should.be.updated.com:12345",
+					AWS: types.AWS{
+						Redshift: types.Redshift{
+							ClusterID: "aws-redshift",
+						},
+					},
 				}),
 			},
 			awsMatchers: []services.AWSMatcher{{

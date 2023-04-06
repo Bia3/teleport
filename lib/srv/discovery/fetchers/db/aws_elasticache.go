@@ -257,3 +257,11 @@ func getElastiCacheResourceTags(ctx context.Context, client elasticacheiface.Ela
 func (f *elastiCacheFetcher) MatchingLabels() types.Labels {
 	return f.cfg.Labels
 }
+
+func (f *elastiCacheFetcher) MatchesResource(r types.ResourceWithLabels) bool {
+	db, ok := r.(types.Database)
+	if !ok {
+		return false
+	}
+	return db.IsElastiCache() && !db.GetAWS().IsEmpty()
+}

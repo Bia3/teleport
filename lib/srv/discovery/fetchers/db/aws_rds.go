@@ -362,7 +362,23 @@ func (f *rdsDBInstancesFetcher) MatchingLabels() types.Labels {
 	return f.cfg.Labels
 }
 
+func (f *rdsDBInstancesFetcher) MatchesResource(r types.ResourceWithLabels) bool {
+	db, ok := r.(types.Database)
+	if !ok {
+		return false
+	}
+	return db.IsRDS() && db.GetAWS().RDS.InstanceID != ""
+}
+
 // MatchingLabels returns the labels that the fetcher is matching.
 func (f *rdsAuroraClustersFetcher) MatchingLabels() types.Labels {
 	return f.cfg.Labels
+}
+
+func (f *rdsAuroraClustersFetcher) MatchesResource(r types.ResourceWithLabels) bool {
+	db, ok := r.(types.Database)
+	if !ok {
+		return false
+	}
+	return db.IsRDS() && db.GetAWS().RDS.InstanceID == "" && !db.GetAWS().IsEmpty()
 }

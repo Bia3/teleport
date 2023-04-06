@@ -140,10 +140,9 @@ func filterResourcesByOrigin[T types.ResourceWithLabels, S ~[]T, K ~[]common.Fet
 // This is used to filter out resources that were created by other discovery services.
 func matchesAtLeastOneFetcher[T types.ResourceWithLabels, K ~[]common.Fetcher](r T, fetchers K) bool {
 	for _, fetcher := range fetchers {
-		if match, _, err := services.MatchLabels(fetcher.MatchingLabels(), r.GetAllLabels()); err != nil || !match {
+		if match, _, err := services.MatchLabels(fetcher.MatchingLabels(), r.GetAllLabels()); err != nil || !match || !fetcher.MatchesResource(r) {
 			continue
 		}
-
 		return true
 	}
 	return false

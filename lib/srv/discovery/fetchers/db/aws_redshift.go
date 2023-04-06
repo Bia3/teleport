@@ -134,3 +134,11 @@ func getRedshiftClusters(ctx context.Context, redshiftClient redshiftiface.Redsh
 func (f *redshiftFetcher) MatchingLabels() types.Labels {
 	return f.cfg.Labels
 }
+
+func (f *redshiftFetcher) MatchesResource(r types.ResourceWithLabels) bool {
+	db, ok := r.(types.Database)
+	if !ok {
+		return false
+	}
+	return db.IsRedshift() && db.GetAWS().Redshift.ClusterID != "" && !db.GetAWS().IsEmpty()
+}

@@ -21,6 +21,7 @@ import (
 
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/cloud/azure"
+	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/srv/discovery/common"
 )
@@ -31,8 +32,7 @@ func newAzurePostgresFlexServerFetcher(config azureFetcherConfig) (common.Fetche
 }
 
 // newAzurePostgresFlexServerFetcher implements azureFetcherPlugin for Azure PostgreSQL Flexible server.
-type azurePostgresFlexServerFetcher struct {
-}
+type azurePostgresFlexServerFetcher struct{}
 
 // GetListClient returns a server-listing client for Azure PostgreSQL Flexible server.
 func (f *azurePostgresFlexServerFetcher) GetListClient(cfg *azureFetcherConfig, subID string) (azure.PostgresFlexServersClient, error) {
@@ -81,4 +81,8 @@ func (f *azurePostgresFlexServerFetcher) isAvailable(server *armpostgresqlflexib
 		state,
 		azure.StringVal(server.Name))
 	return true
+}
+
+func (f *azurePostgresFlexServerFetcher) MatchesResource(db types.Database) bool {
+	return db.GetType() == types.DatabaseTypeAzure && db.GetProtocol() == defaults.ProtocolPostgres && db.GetAzure().Redis.ClusteringPolicy != ""
 }

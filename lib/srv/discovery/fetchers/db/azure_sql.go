@@ -21,6 +21,7 @@ import (
 
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/cloud/azure"
+	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/srv/discovery/common"
 )
@@ -31,8 +32,7 @@ func newAzureSQLServerFetcher(config azureFetcherConfig) (common.Fetcher, error)
 }
 
 // azureSQLServerFetcher implements azureFetcherPlugin for Azure SQL Servers.
-type azureSQLServerFetcher struct {
-}
+type azureSQLServerFetcher struct{}
 
 func (f *azureSQLServerFetcher) GetListClient(cfg *azureFetcherConfig, subID string) (azure.SQLServerClient, error) {
 	client, err := cfg.AzureClients.GetAzureSQLServerClient(subID)
@@ -53,4 +53,8 @@ func (f *azureSQLServerFetcher) NewDatabaseFromServer(server *armsql.Server, log
 	// The method used to list the SQL servers only return running servers so
 	// there is no need to check the status here.
 	return database
+}
+
+func (f *azureSQLServerFetcher) MatchesResource(db types.Database) bool {
+	return db.GetType() == types.DatabaseTypeAzure && db.GetProtocol() == defaults.ProtocolSQLServer
 }

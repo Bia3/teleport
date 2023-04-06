@@ -110,3 +110,7 @@ func (m *mockFetcher) Cloud() string {
 func (m *mockFetcher) MatchingLabels() types.Labels {
 	return nil
 }
+
+func (m *mockFetcher) MatchesResource(types.ResourceWithLabels) bool {
+	return true
+}

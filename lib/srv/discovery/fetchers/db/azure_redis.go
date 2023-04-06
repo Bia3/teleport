@@ -23,6 +23,7 @@ import (
 
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/cloud/azure"
+	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/srv/discovery/common"
 )
@@ -33,8 +34,7 @@ func newAzureRedisFetcher(config azureFetcherConfig) (common.Fetcher, error) {
 }
 
 // azureRedisPlugin implements azureFetcherPlugin for Azure Redis.
-type azureRedisPlugin struct {
-}
+type azureRedisPlugin struct{}
 
 func (p *azureRedisPlugin) GetListClient(cfg *azureFetcherConfig, subID string) (azure.RedisClient, error) {
 	client, err := cfg.AzureClients.GetAzureRedisClient(subID)
@@ -91,4 +91,8 @@ func (p *azureRedisPlugin) isAvailable(server *armredis.ResourceInfo) bool {
 		)
 		return true
 	}
+}
+
+func (f *azureRedisPlugin) MatchesResource(db types.Database) bool {
+	return db.GetType() == types.DatabaseTypeAzure && db.GetProtocol() == defaults.ProtocolRedis && db.GetAzure().Redis.ClusteringPolicy == ""
 }

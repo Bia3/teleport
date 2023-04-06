@@ -222,3 +222,11 @@ func findWorkgroupWithName(workgroups []*redshiftServerlessWorkgroupWithTags, na
 func (f *redshiftServerlessFetcher) MatchingLabels() types.Labels {
 	return f.cfg.Labels
 }
+
+func (f *redshiftServerlessFetcher) MatchesResource(r types.ResourceWithLabels) bool {
+	db, ok := r.(types.Database)
+	if !ok {
+		return false
+	}
+	return db.IsRedshift() && db.GetAWS().RedshiftServerless.WorkgroupName != "" && !db.GetAWS().IsEmpty()
+}

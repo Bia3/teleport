@@ -218,3 +218,11 @@ func listRDSResourceTags(ctx context.Context, rdsClient rdsiface.RDSAPI, resourc
 func (f *rdsDBProxyFetcher) MatchingLabels() types.Labels {
 	return f.cfg.Labels
 }
+
+func (f *rdsDBProxyFetcher) MatchesResource(r types.ResourceWithLabels) bool {
+	db, ok := r.(types.Database)
+	if !ok {
+		return false
+	}
+	return db.IsRDSProxy() && !db.GetAWS().IsEmpty()
+}
