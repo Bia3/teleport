@@ -160,26 +160,21 @@ func (c *consumer) singleBatch(ctx context.Context) error {
 		c.Debugf("Batch of %d took: %s", size, time.Since(start))
 	}()
 
-	msgsCollector := sqsMessagesCollector{
-		log:    c.Entry,
-		config: c.collectConfig,
-		errHandlingFn: func(ctx context.Context, errC chan error) {
-			err := trace.NewAggregateFromChannel(errC, ctx)
-			if err != nil {
-				c.Entry.WithError(err).Error("Following errors happen during receiving/converting sqs message")
-			}
-		},
-	}
+	msgsCollector := newSqsMessagesCollector(c.collectConfig, c.Entry, func(ctx context.Context, errC chan error) {
+		err := trace.NewAggregateFromChannel(errC, ctx)
+		if err != nil {
+			c.Entry.WithError(err).Error("Following errors happen during receiving/converting sqs message")
+		}
+	})
 
-	// eventsChan is used for communication between [msgsFromQueue] and [writeToS3].
-	eventsChan := make(chan eventAndAckID, c.batchMaxItems)
+	// eventsChan is used for communication between [fromSQS] and [writeToS3].
+	eventsChan := msgsCollector.getEventsChan()
 
 	readSQSCtx, readCancel := context.WithTimeout(ctx, c.batchMaxInterval)
 	defer readCancel()
 
 	go func() {
-		msgsCollector.msgsFromQueue(readSQSCtx, eventsChan)
-		close(eventsChan)
+		msgsCollector.fromSQS(readSQSCtx)
 	}()
 	var err error
 	size, err = c.writeToS3(ctx, eventsChan)
@@ -196,12 +191,30 @@ type sqsMessagesCollector struct {
 	log           *log.Entry
 	config        sqsCollectConfig
 	errHandlingFn func(ctx context.Context, errC chan error)
+	eventsChan    chan eventAndAckID
 }
 
-// msgsFromQueue receives messages from SQS and sends it on eventsC channel.
+// newSqsMessagesCollector returns message collector.
+// Collector sends collected messages from SQS on events channel.
+func newSqsMessagesCollector(cfg sqsCollectConfig, log *log.Entry, errHandlingFn func(ctx context.Context, errC chan error)) *sqsMessagesCollector {
+	return &sqsMessagesCollector{
+		log:           log,
+		config:        cfg,
+		errHandlingFn: errHandlingFn,
+		eventsChan:    make(chan eventAndAckID, cfg.batchMaxItems),
+	}
+}
+
+// getEventsChan returns channel which can be used to read messages from SQS.
+// When collector finishes, channel will be closed.
+func (s *sqsMessagesCollector) getEventsChan() <-chan eventAndAckID {
+	return s.eventsChan
+}
+
+// fromSQS receives messages from SQS and sends it on eventsC channel.
 // It runs until context is canceled (via timeout) or when maxItems is reached.
 // MaxItems is soft limit and can happen that it will return more items then MaxItems.
-func (s *sqsMessagesCollector) msgsFromQueue(ctx context.Context, eventsC chan<- eventAndAckID) {
+func (s *sqsMessagesCollector) fromSQS(ctx context.Context) {
 	// Errors should be immediately process by error handling loop, so 10 size
 	// should be enough to not cause blocking.
 	errorsC := make(chan error, 10)
@@ -211,6 +224,7 @@ func (s *sqsMessagesCollector) msgsFromQueue(ctx context.Context, eventsC chan<-
 	go func() {
 		s.errHandlingFn(ctx, errorsC)
 	}()
+	eventsC := s.eventsChan
 
 	count := 0
 	countMu := sync.Mutex{}
@@ -236,7 +250,6 @@ func (s *sqsMessagesCollector) msgsFromQueue(ctx context.Context, eventsC chan<-
 				if deadline, ok := wokerCtx.Deadline(); ok && time.Until(deadline) <= s.config.waitOnReceiveDuration {
 					return
 				}
-
 				events, err := s.receiveMessages(wokerCtx)
 				if err != nil {
 					// TODO(tobiaszheller): maybe we need to check for other errors than cancel as well
@@ -269,6 +282,7 @@ func (s *sqsMessagesCollector) msgsFromQueue(ctx context.Context, eventsC chan<-
 		}(i)
 	}
 	wg.Wait()
+	close(eventsC)
 }
 
 type sqsMessageWithError struct {

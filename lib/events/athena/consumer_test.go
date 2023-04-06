@@ -27,90 +27,169 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	sqsTypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/google/uuid"
+	"github.com/jonboulle/clockwork"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	apievents "github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/lib/events"
 )
 
-func Test_consumer_msgsFromQueue(t *testing.T) {
-	fq := &fakeSQS{}
-	c := &sqsMessagesCollector{
-		log: logrus.NewEntry(logrus.New()),
-		config: sqsCollectConfig{
+func Test_consumer_sqsMessagesCollector(t *testing.T) {
+	fatalOnErrFunc := func(ctx context.Context, errC chan error) {
+		err, ok := <-errC
+		if ok && err != nil {
+			// we don't expect error in that test case.
+			t.Fatal(err)
+		}
+	}
+	// channelClosedCondition returns function that can be used to check if eventually
+	// channel was closed.
+	channelClosedCondition := func(t *testing.T, ch <-chan eventAndAckID) func() bool {
+		return func() bool {
+			select {
+			case _, ok := <-ch:
+				if ok {
+					t.Fatal("don't expect message here, fail")
+					return false
+				} else {
+					// channel is closed, that's what we are waiting for.
+					return true
+				}
+			default:
+				// retry
+				return false
+			}
+		}
+	}
+	log := logrus.NewEntry(logrus.New())
+
+	maxWaitTimeOnReceiveMessagesInFake := 20 * time.Millisecond
+
+	t.Run("scenario 1", func(t *testing.T) {
+		// Given SqsMessagesCollector reading from fake sqs with random wait time on receiveMessage call
+		// When 3 messages are published
+		// Then 3 messages can be received from eventsChan.
+
+		// Given
+		fclock := clockwork.NewFakeClock()
+		fq := &fakeSQS{
+			clock:       fclock,
+			maxWaitTime: maxWaitTimeOnReceiveMessagesInFake,
+		}
+		c := newSqsMessagesCollector(sqsCollectConfig{
 			sqsReceiver:           fq,
 			waitOnReceiveDuration: 5 * time.Millisecond,
 			batchMaxItems:         20000,
-		},
-		errHandlingFn: func(ctx context.Context, errC chan error) {
-			err, ok := <-errC
-			if ok && err != nil {
-				// we don't expect error in that test case.
-				t.Fatal(err)
-			}
-		},
-	}
+		}, log, fatalOnErrFunc)
+		eventsChan := c.getEventsChan()
 
-	t.Run("publish 3 events via fake and expect it on receive channel", func(t *testing.T) {
-		fq.clear()
-		eventsChan := make(chan eventAndAckID, 100)
 		readSQSCtx, readCancel := context.WithCancel(context.Background())
 		defer readCancel()
-		go c.msgsFromQueue(readSQSCtx, eventsChan)
+		go c.fromSQS(readSQSCtx)
 
+		// receiver is used to read messages from eventsChan.
 		r := &receiver{}
 		go r.Do(eventsChan)
 
+		// When
 		fq.addEvents(
 			&apievents.AppCreate{Metadata: apievents.Metadata{Type: events.AppCreateEvent}},
 			&apievents.AppCreate{Metadata: apievents.Metadata{Type: events.AppCreateEvent}},
 			&apievents.AppCreate{Metadata: apievents.Metadata{Type: events.AppCreateEvent}},
 		)
-		time.Sleep(25 * time.Millisecond)
-		require.Len(t, r.GetMsgs(), 3)
+		// Advance clock to simulate random wait time on receive messages endpoint.
+		fclock.BlockUntil(maxNumberOfWorkers)
+		fclock.Advance(maxWaitTimeOnReceiveMessagesInFake)
 
-		// Make sure that after canceling context, no more events are returned - so it should still be 3.
-		readCancel()
-		time.Sleep(5 * time.Millisecond)
-		fq.addEvents(&apievents.AppCreate{Metadata: apievents.Metadata{Type: events.AppCreateEvent}})
-		time.Sleep(25 * time.Millisecond)
-		require.Len(t, r.GetMsgs(), 3)
+		// Then
+		require.Eventually(t, func() bool {
+			return len(r.GetMsgs()) == 3
+		}, 10*time.Millisecond, 1*time.Millisecond)
 	})
-	t.Run("verify that if maxBatchSize is reached, msgsFromQueue returns", func(t *testing.T) {
-		fq.clear()
-		eventsChan := make(chan eventAndAckID, 100)
+
+	t.Run("scenario 2", func(t *testing.T) {
+		// Given SqsMessagesCollector reading from fake sqs with random wait time on receiveMessage call
+		// When ctx is cancelled
+		// Then reading chan is closed.
+
+		// Given
+		fclock := clockwork.NewFakeClock()
+		fq := &fakeSQS{
+			clock:       fclock,
+			maxWaitTime: maxWaitTimeOnReceiveMessagesInFake,
+		}
+		c := newSqsMessagesCollector(sqsCollectConfig{
+			sqsReceiver:           fq,
+			waitOnReceiveDuration: 5 * time.Millisecond,
+			batchMaxItems:         20000,
+		}, log, fatalOnErrFunc)
+		eventsChan := c.getEventsChan()
+
+		readSQSCtx, readCancel := context.WithCancel(context.Background())
+		go c.fromSQS(readSQSCtx)
+
+		// When
+		readCancel()
+
+		// Then
+		// Make sure that channel is closed.
+		require.Eventually(t, channelClosedCondition(t, eventsChan), 10*time.Millisecond, 1*time.Millisecond)
+	})
+
+	t.Run("scenario 3", func(t *testing.T) {
+		// Given SqsMessagesCollector reading from fake sqs with random wait time on receiveMessage call
+		// When batchMaxItems is reached.
+		// Then reading chan is closed.
+
+		// Given
+		fclock := clockwork.NewFakeClock()
+		fq := &fakeSQS{
+			clock:       fclock,
+			maxWaitTime: maxWaitTimeOnReceiveMessagesInFake,
+		}
+		c := newSqsMessagesCollector(sqsCollectConfig{
+			sqsReceiver:           fq,
+			waitOnReceiveDuration: 5 * time.Millisecond,
+			batchMaxItems:         3,
+		}, log, fatalOnErrFunc)
+
+		eventsChan := c.getEventsChan()
+
 		readSQSCtx, readCancel := context.WithCancel(context.Background())
 		defer readCancel()
-		c.config.batchMaxItems = 3
-		go c.msgsFromQueue(readSQSCtx, eventsChan)
 
+		go c.fromSQS(readSQSCtx)
+
+		// receiver is used to read messages from eventsChan.
 		r := &receiver{}
 		go r.Do(eventsChan)
 
+		// When
 		fq.addEvents(
 			&apievents.AppCreate{Metadata: apievents.Metadata{Type: events.AppCreateEvent}},
 			&apievents.AppCreate{Metadata: apievents.Metadata{Type: events.AppCreateEvent}},
 			&apievents.AppCreate{Metadata: apievents.Metadata{Type: events.AppCreateEvent}},
 		)
-		time.Sleep(25 * time.Millisecond)
-		require.Len(t, r.GetMsgs(), 3)
-		// verify that adding next won't be receive, because maxSize is reached.
-		fq.addEvents(&apievents.AppCreate{Metadata: apievents.Metadata{Type: events.AppCreateEvent}})
-		time.Sleep(25 * time.Millisecond)
-		require.Len(t, r.GetMsgs(), 3)
+		fclock.BlockUntil(maxNumberOfWorkers)
+		fclock.Advance(maxWaitTimeOnReceiveMessagesInFake)
+		require.Eventually(t, func() bool {
+			t.Log(len(r.GetMsgs()))
+			return assert.Len(t, r.GetMsgs(), 3)
+		}, 10*time.Millisecond, 1*time.Millisecond)
+
+		// Then
+		// Make sure that channel is closed.
+		require.Eventually(t, channelClosedCondition(t, eventsChan), 10*time.Millisecond, 1*time.Millisecond)
 	})
 }
 
 type fakeSQS struct {
-	mu   sync.Mutex
-	msgs []sqsTypes.Message
-}
-
-func (f *fakeSQS) clear() {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.msgs = nil
+	mu          sync.Mutex
+	msgs        []sqsTypes.Message
+	clock       clockwork.Clock
+	maxWaitTime time.Duration
 }
 
 func (f *fakeSQS) addEvents(events ...apievents.AuditEvent) {
@@ -124,15 +203,14 @@ func (f *fakeSQS) addEvents(events ...apievents.AuditEvent) {
 func (f *fakeSQS) ReceiveMessage(ctx context.Context, params *sqs.ReceiveMessageInput, optFns ...func(*sqs.Options)) (*sqs.ReceiveMessageOutput, error) {
 	// Let's use random sleep duration. That's how sqs works, you could wait up until max wait time but
 	// it can return earlier.
-	randSleepDuration, err := rand.Int(rand.Reader, big.NewInt(20*time.Millisecond.Nanoseconds()))
+	randSleepDuration, err := rand.Int(rand.Reader, big.NewInt(f.maxWaitTime.Nanoseconds()))
 	if err != nil {
 		panic(err)
 	}
-
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case <-time.After(time.Duration(randSleepDuration.Int64())):
+	case <-f.clock.After(time.Duration(randSleepDuration.Int64())):
 		// continue below
 	}
 	f.mu.Lock()
