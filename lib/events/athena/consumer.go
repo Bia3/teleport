@@ -47,6 +47,10 @@ const (
 	// maxNumberOfWorkers defines how many workers are processing messages
 	// from queue or writing parquet files to s3.
 	maxNumberOfWorkers = 5
+	// maxNumberOfMessagesFromReceive defines how many messages single receive
+	// call can return. Maximum value is 10.
+	// https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_ReceiveMessage.html
+	maxNumberOfMessagesFromReceive = 10
 )
 
 // consumer is responsible for receiving messages from SQS, batching them up to
@@ -278,7 +282,7 @@ func (s *sqsMessagesCollector) receiveMessages(ctx context.Context) ([]sqsMessag
 	out := make([]sqsMessageWithError, 0, 10)
 	sqsOut, err := s.config.sqsReceiver.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
 		QueueUrl:              aws.String(s.config.queueURL),
-		MaxNumberOfMessages:   10,
+		MaxNumberOfMessages:   maxNumberOfMessagesFromReceive,
 		WaitTimeSeconds:       s.config.waitOnReceiveTimeout,
 		VisibilityTimeout:     s.config.visibilityTimeout,
 		MessageAttributeNames: []string{payloadTypeAttr},
