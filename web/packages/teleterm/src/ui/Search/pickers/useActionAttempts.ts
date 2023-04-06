@@ -34,7 +34,7 @@ import Logger from 'teleterm/logger';
 import { useAppContext } from 'teleterm/ui/appContextProvider';
 import { useSearchContext } from 'teleterm/ui/Search/SearchContext';
 
-export function useSearchAttempts() {
+export function useActionAttempts() {
   const searchLogger = useRef(new Logger('search'));
   const ctx = useAppContext();
   const searchContext = useSearchContext();
@@ -59,7 +59,7 @@ export function useSearchAttempts() {
   const resourceActionsAttempt = useMemo(
     () =>
       mapAttempt(resourceSearchAttempt, ({ results, search }) => {
-        const sortedResults = sortResults(results, search);
+        const sortedResults = sortResults(results, search).slice(0, 10);
         searchLogger.current.info('results for', search, sortedResults);
 
         return mapToActions(ctx, searchContext, sortedResults);
@@ -95,7 +95,13 @@ export function useSearchAttempts() {
     runResourceSearchDebounced,
   ]);
 
-  return [filterActionsAttempt, resourceActionsAttempt];
+  return {
+    actionAttempts: [filterActionsAttempt, resourceActionsAttempt],
+    // resourceSearchAttempt is the raw version of useResourceSearch attempt that has not been
+    // mapped to actions. Returning this will allow ActionPicker to inspect errors returned from the
+    // resource search.
+    resourceSearchAttempt,
+  };
 }
 
 function useDebounce<Args extends unknown[], ReturnValue>(

@@ -37,7 +37,7 @@ import * as uri from 'teleterm/ui/uri';
 import { SearchAction } from '../actions';
 import { useSearchContext } from '../SearchContext';
 
-import { useSearchAttempts } from './useSearchAttempts';
+import { useActionAttempts } from './useActionAttempts';
 import { getParameterPicker } from './pickers';
 import { ResultList, EmptyListCopy } from './ResultList';
 
@@ -55,7 +55,7 @@ export function ActionPicker(props: { input: ReactElement }) {
     filters,
     removeFilter,
   } = useSearchContext();
-  const attempts = useSearchAttempts();
+  const { actionAttempts } = useActionAttempts();
   const totalCountOfClusters = clustersService.getClusters().length;
 
   const getClusterName = useCallback(
@@ -158,7 +158,7 @@ export function ActionPicker(props: { input: ReactElement }) {
         {props.input}
       </Flex>
       <ResultList<SearchAction>
-        attempts={attempts}
+        attempts={actionAttempts}
         onPick={onPick}
         onBack={close}
         render={item => {

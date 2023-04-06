@@ -22,7 +22,7 @@ import { MockAppContext } from 'teleterm/ui/fixtures/mocks';
 import { MockAppContextProvider } from 'teleterm/ui/fixtures/MockAppContextProvider';
 
 import * as pickers from './pickers/pickers';
-import * as useSearchAttempts from './pickers/useSearchAttempts';
+import * as useActionAttempts from './pickers/useActionAttempts';
 import * as SearchContext from './SearchContext';
 
 import { SearchBarConnected } from './SearchBar';
@@ -33,10 +33,17 @@ it('does not display empty results copy after selecting two filters', () => {
     draft.rootClusterUri = '/clusters/foo';
   });
 
-  const mockAttempts = [makeSuccessAttempt([])];
+  const mockActionAttempts = {
+    actionAttempts: [makeSuccessAttempt([])],
+    resourceSearchAttempt: makeSuccessAttempt({
+      results: [],
+      errors: [],
+      search: '',
+    }),
+  };
   jest
-    .spyOn(useSearchAttempts, 'useSearchAttempts')
-    .mockImplementation(() => mockAttempts);
+    .spyOn(useActionAttempts, 'useActionAttempts')
+    .mockImplementation(() => mockActionAttempts);
   jest.spyOn(SearchContext, 'useSearchContext').mockImplementation(() => ({
     filters: [
       { filter: 'cluster', clusterUri: '/clusters/foo' },
@@ -72,10 +79,17 @@ it('does display empty results copy after providing search query for which there
     draft.rootClusterUri = '/clusters/foo';
   });
 
-  const mockAttempts = [makeSuccessAttempt([])];
+  const mockActionAttempts = {
+    actionAttempts: [makeSuccessAttempt([])],
+    resourceSearchAttempt: makeSuccessAttempt({
+      results: [],
+      errors: [],
+      search: '',
+    }),
+  };
   jest
-    .spyOn(useSearchAttempts, 'useSearchAttempts')
-    .mockImplementation(() => mockAttempts);
+    .spyOn(useActionAttempts, 'useActionAttempts')
+    .mockImplementation(() => mockActionAttempts);
   jest.spyOn(SearchContext, 'useSearchContext').mockImplementation(() => ({
     inputValue: 'foo',
     filters: [],
