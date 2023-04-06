@@ -144,3 +144,7 @@ func (a *aksFetcher) String() string {
 	return fmt.Sprintf("aksFetcher(ResourceGroups=%v, Regions=%v, FilterLabels=%v)",
 		a.ResourceGroups, a.Regions, a.FilterLabels)
 }
+
+func (a *aksFetcher) MatchingLabels() types.Labels {
+	return a.FilterLabels
+}

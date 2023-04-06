@@ -213,3 +213,8 @@ func listRDSResourceTags(ctx context.Context, rdsClient rdsiface.RDSAPI, resourc
 	}
 	return output.TagList, nil
 }
+
+// MatchingLabels returns the labels that the fetcher is matching.
+func (f *rdsDBProxyFetcher) MatchingLabels() types.Labels {
+	return f.cfg.Labels
+}

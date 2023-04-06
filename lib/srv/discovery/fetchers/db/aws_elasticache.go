@@ -252,3 +252,8 @@ func getElastiCacheResourceTags(ctx context.Context, client elasticacheiface.Ela
 
 	return output.TagList, nil
 }
+
+// MatchingLabels returns the labels that the fetcher is matching.
+func (f *elastiCacheFetcher) MatchingLabels() types.Labels {
+	return f.cfg.Labels
+}

@@ -46,16 +46,7 @@ func (s *Server) startKubeWatchers() error {
 					return nil
 				}
 
-				// filter only discover clusters.
-				var kubeClusters types.KubeClusters
-				for _, kc := range kcs {
-					if kc.Origin() != types.OriginCloud {
-						continue
-					}
-					kubeClusters = append(kubeClusters, kc)
-				}
-
-				return kubeClusters.AsResources().ToMap()
+				return types.KubeClusters(filterResourcesByOrigin(kcs, s.kubeFetchers, types.OriginCloud)).AsResources().ToMap()
 			},
 			GetNewResources: func() types.ResourcesWithLabelsMap {
 				mu.Lock()

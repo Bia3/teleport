@@ -159,3 +159,7 @@ func (a *gkeFetcher) getMatchingKubeCluster(gkeCluster gcp.GKECluster) (types.Ku
 	}
 	return cluster, nil
 }
+
+func (a *gkeFetcher) MatchingLabels() types.Labels {
+	return a.FilterLabels
+}

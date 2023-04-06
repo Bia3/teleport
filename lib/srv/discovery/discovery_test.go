@@ -465,7 +465,7 @@ func TestDiscoveryKube(t *testing.T) {
 			clustersNotUpdated: []string{"eks-cluster1"},
 		},
 		{
-			name: "1 cluster in auth that no longer matches (deleted) + import 2 prod clusters from EKS",
+			name: "1 cluster in auth that is preserved because it doesn't match the aws watchers + import 2 prod clusters from EKS",
 			existingKubeClusters: []types.KubeCluster{
 				mustConvertEKSToKubeCluster(t, eksMockClusters[3]),
 			},
@@ -477,6 +477,7 @@ func TestDiscoveryKube(t *testing.T) {
 				},
 			},
 			expectedClustersToExistInAuth: []types.KubeCluster{
+				mustConvertEKSToKubeCluster(t, eksMockClusters[3]),
 				mustConvertEKSToKubeCluster(t, eksMockClusters[0]),
 				mustConvertEKSToKubeCluster(t, eksMockClusters[1]),
 			},
@@ -984,11 +985,11 @@ func TestDiscoveryDatabase(t *testing.T) {
 			existingDatabases: []types.Database{
 				mustNewDatabase(t, types.Metadata{
 					Name:        "aws-redshift",
-					Description: "should be deleted",
+					Description: "should not be deleted",
 					Labels:      map[string]string{types.OriginLabel: types.OriginCloud},
 				}, types.DatabaseSpecV3{
 					Protocol: "redis",
-					URI:      "should.be.deleted.com:12345",
+					URI:      "should.not.be.deleted.com:12345",
 				}),
 			},
 			awsMatchers: []services.AWSMatcher{{
@@ -996,7 +997,16 @@ func TestDiscoveryDatabase(t *testing.T) {
 				Tags:    map[string]utils.Strings{"do-not-match": {"do-not-match"}},
 				Regions: []string{"us-east-1"},
 			}},
-			expectDatabases: []types.Database{},
+			expectDatabases: []types.Database{
+				mustNewDatabase(t, types.Metadata{
+					Name:        "aws-redshift",
+					Description: "should not be deleted",
+					Labels:      map[string]string{types.OriginLabel: types.OriginCloud},
+				}, types.DatabaseSpecV3{
+					Protocol: "redis",
+					URI:      "should.not.be.deleted.com:12345",
+				}),
+			},
 		},
 		{
 			name: "skip self-hosted database",

@@ -98,9 +98,15 @@ func (m *mockFetcher) Get(ctx context.Context) (types.ResourcesWithLabels, error
 	}
 	return m.resources, nil
 }
+
 func (m *mockFetcher) ResourceType() string {
 	return m.resourceType
 }
+
 func (m *mockFetcher) Cloud() string {
 	return m.cloud
+}
+
+func (m *mockFetcher) MatchingLabels() types.Labels {
+	return nil
 }

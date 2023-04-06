@@ -217,3 +217,8 @@ func findWorkgroupWithName(workgroups []*redshiftServerlessWorkgroupWithTags, na
 	}
 	return nil, false
 }
+
+// MatchingLabels returns the labels that the fetcher is matching.
+func (f *redshiftServerlessFetcher) MatchingLabels() types.Labels {
+	return f.cfg.Labels
+}

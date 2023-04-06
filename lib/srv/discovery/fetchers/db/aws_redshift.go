@@ -129,3 +129,8 @@ func getRedshiftClusters(ctx context.Context, redshiftClient redshiftiface.Redsh
 	)
 	return clusters, trace.Wrap(libcloudaws.ConvertRequestFailureError(err))
 }
+
+// MatchingLabels returns the labels that the fetcher is matching.
+func (f *redshiftFetcher) MatchingLabels() types.Labels {
+	return f.cfg.Labels
+}

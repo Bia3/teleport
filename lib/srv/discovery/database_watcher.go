@@ -94,7 +94,7 @@ func (s *Server) getCurrentDatabases() types.ResourcesWithLabelsMap {
 		return nil
 	}
 
-	return types.Databases(filterResourcesByOrigin(databases, types.OriginCloud)).AsResources().ToMap()
+	return types.Databases(filterResourcesByOrigin(databases, s.databaseFetchers, types.OriginCloud)).AsResources().ToMap()
 }
 
 func (s *Server) onDatabaseCreate(ctx context.Context, resource types.ResourceWithLabels) error {
@@ -124,11 +124,27 @@ func (s *Server) onDatabaseDelete(ctx context.Context, resource types.ResourceWi
 	return trace.Wrap(s.AccessPoint.DeleteDatabase(ctx, database.GetName()))
 }
 
-func filterResourcesByOrigin[T types.ResourceWithOrigin, S ~[]T](all S, wantOrigin string) (filtered S) {
+func filterResourcesByOrigin[T types.ResourceWithLabels, S ~[]T, K ~[]common.Fetcher](all S, fetchers K, wantOrigin string) (filtered S) {
 	for _, resource := range all {
-		if resource.Origin() == wantOrigin {
-			filtered = append(filtered, resource)
+		if resource.Origin() != wantOrigin || !matchesAtLeastOneFetcher(resource, fetchers) {
+			continue
 		}
+		filtered = append(filtered, resource)
+
 	}
 	return
+}
+
+// matchesAtLeastOneFetcher returns true if the resource matches at least one
+// of the fetchers.
+// This is used to filter out resources that were created by other discovery services.
+func matchesAtLeastOneFetcher[T types.ResourceWithLabels, K ~[]common.Fetcher](r T, fetchers K) bool {
+	for _, fetcher := range fetchers {
+		if match, _, err := services.MatchLabels(fetcher.MatchingLabels(), r.GetAllLabels()); err != nil || !match {
+			continue
+		}
+
+		return true
+	}
+	return false
 }

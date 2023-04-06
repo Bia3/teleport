@@ -195,3 +195,7 @@ func (a *eksFetcher) getMatchingKubeCluster(ctx context.Context, clusterName str
 	}
 	return cluster, nil
 }
+
+func (a *eksFetcher) MatchingLabels() types.Labels {
+	return a.FilterLabels
+}

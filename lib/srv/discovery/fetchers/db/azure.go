@@ -233,3 +233,8 @@ func (f *azureFetcher[DBType, ListClient]) String() string {
 	return fmt.Sprintf("azureFetcher(Type=%v, Subscription=%v, ResourceGroup=%v, Regions=%v, Labels=%v)",
 		f.cfg.Type, f.cfg.Subscription, f.cfg.ResourceGroup, f.cfg.Regions, f.cfg.Labels)
 }
+
+// MatchingLabels returns the labels that the fetcher is matching.
+func (f *azureFetcher[DBType, ListClient]) MatchingLabels() types.Labels {
+	return f.cfg.Labels
+}

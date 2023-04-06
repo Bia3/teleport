@@ -356,3 +356,13 @@ func isUnrecognizedAWSEngineNameError(err error) bool {
 	}
 	return strings.Contains(strings.ToLower(err.Error()), "unrecognized engine name")
 }
+
+// MatchingLabels returns the labels that the fetcher is matching.
+func (f *rdsDBInstancesFetcher) MatchingLabels() types.Labels {
+	return f.cfg.Labels
+}
+
+// MatchingLabels returns the labels that the fetcher is matching.
+func (f *rdsAuroraClustersFetcher) MatchingLabels() types.Labels {
+	return f.cfg.Labels
+}

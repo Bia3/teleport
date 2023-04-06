@@ -204,3 +204,8 @@ func getMemoryDBResourceTags(ctx context.Context, client memorydbiface.MemoryDBA
 
 	return output.TagList, nil
 }
+
+// MatchingLabels returns the labels that the fetcher is matching.
+func (f *memoryDBFetcher) MatchingLabels() types.Labels {
+	return f.cfg.Labels
+}

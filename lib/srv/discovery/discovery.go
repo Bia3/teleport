@@ -401,7 +401,6 @@ func (s *Server) handleEC2Discovery() {
 				} else {
 					s.Log.WithError(err).Error("Failed to enroll discovered EC2 instances.")
 				}
-
 			}
 		case <-s.ctx.Done():
 			s.ec2Watcher.Stop()
