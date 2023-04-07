@@ -29,7 +29,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
 	"github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	apievents "github.com/gravitational/teleport/api/types/events"
@@ -65,7 +64,8 @@ func Test_consumer_sqsMessagesCollector(t *testing.T) {
 	}
 	log := logrus.NewEntry(logrus.New())
 
-	maxWaitTimeOnReceiveMessagesInFake := 20 * time.Millisecond
+	maxWaitTimeOnReceiveMessagesInFake := 5 * time.Millisecond
+	maxWaitOnResults := 50 * time.Millisecond
 
 	t.Run("scenario 1", func(t *testing.T) {
 		// Given SqsMessagesCollector reading from fake sqs with random wait time on receiveMessage call
@@ -79,9 +79,8 @@ func Test_consumer_sqsMessagesCollector(t *testing.T) {
 			maxWaitTime: maxWaitTimeOnReceiveMessagesInFake,
 		}
 		c := newSqsMessagesCollector(sqsCollectConfig{
-			sqsReceiver:           fq,
-			waitOnReceiveDuration: 5 * time.Millisecond,
-			batchMaxItems:         20000,
+			sqsReceiver:   fq,
+			batchMaxItems: 20000,
 		}, log, fatalOnErrFunc)
 		eventsChan := c.getEventsChan()
 
@@ -106,7 +105,7 @@ func Test_consumer_sqsMessagesCollector(t *testing.T) {
 		// Then
 		require.Eventually(t, func() bool {
 			return len(r.GetMsgs()) == 3
-		}, 10*time.Millisecond, 1*time.Millisecond)
+		}, maxWaitOnResults, 1*time.Millisecond)
 	})
 
 	t.Run("scenario 2", func(t *testing.T) {
@@ -121,9 +120,8 @@ func Test_consumer_sqsMessagesCollector(t *testing.T) {
 			maxWaitTime: maxWaitTimeOnReceiveMessagesInFake,
 		}
 		c := newSqsMessagesCollector(sqsCollectConfig{
-			sqsReceiver:           fq,
-			waitOnReceiveDuration: 5 * time.Millisecond,
-			batchMaxItems:         20000,
+			sqsReceiver:   fq,
+			batchMaxItems: 20000,
 		}, log, fatalOnErrFunc)
 		eventsChan := c.getEventsChan()
 
@@ -135,7 +133,7 @@ func Test_consumer_sqsMessagesCollector(t *testing.T) {
 
 		// Then
 		// Make sure that channel is closed.
-		require.Eventually(t, channelClosedCondition(t, eventsChan), 10*time.Millisecond, 1*time.Millisecond)
+		require.Eventually(t, channelClosedCondition(t, eventsChan), maxWaitOnResults, 1*time.Millisecond)
 	})
 
 	t.Run("scenario 3", func(t *testing.T) {
@@ -150,9 +148,8 @@ func Test_consumer_sqsMessagesCollector(t *testing.T) {
 			maxWaitTime: maxWaitTimeOnReceiveMessagesInFake,
 		}
 		c := newSqsMessagesCollector(sqsCollectConfig{
-			sqsReceiver:           fq,
-			waitOnReceiveDuration: 5 * time.Millisecond,
-			batchMaxItems:         3,
+			sqsReceiver:   fq,
+			batchMaxItems: 3,
 		}, log, fatalOnErrFunc)
 
 		eventsChan := c.getEventsChan()
@@ -175,13 +172,12 @@ func Test_consumer_sqsMessagesCollector(t *testing.T) {
 		fclock.BlockUntil(maxNumberOfWorkers)
 		fclock.Advance(maxWaitTimeOnReceiveMessagesInFake)
 		require.Eventually(t, func() bool {
-			t.Log(len(r.GetMsgs()))
-			return assert.Len(t, r.GetMsgs(), 3)
-		}, 10*time.Millisecond, 1*time.Millisecond)
+			return len(r.GetMsgs()) == 3
+		}, maxWaitOnResults, 1*time.Millisecond)
 
 		// Then
 		// Make sure that channel is closed.
-		require.Eventually(t, channelClosedCondition(t, eventsChan), 10*time.Millisecond, 1*time.Millisecond)
+		require.Eventually(t, channelClosedCondition(t, eventsChan), maxWaitOnResults, 1*time.Millisecond)
 	})
 }
 
@@ -203,14 +199,15 @@ func (f *fakeSQS) addEvents(events ...apievents.AuditEvent) {
 func (f *fakeSQS) ReceiveMessage(ctx context.Context, params *sqs.ReceiveMessageInput, optFns ...func(*sqs.Options)) (*sqs.ReceiveMessageOutput, error) {
 	// Let's use random sleep duration. That's how sqs works, you could wait up until max wait time but
 	// it can return earlier.
-	randSleepDuration, err := rand.Int(rand.Reader, big.NewInt(f.maxWaitTime.Nanoseconds()))
+
+	randInt, err := rand.Int(rand.Reader, big.NewInt(f.maxWaitTime.Nanoseconds()))
 	if err != nil {
 		panic(err)
 	}
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case <-f.clock.After(time.Duration(randSleepDuration.Int64())):
+	case <-f.clock.After(time.Duration(randInt.Int64())):
 		// continue below
 	}
 	f.mu.Lock()
