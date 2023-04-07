@@ -75,11 +75,9 @@ by specifying a node name in the join params.
 
 ### Agent installation
 
-In order to install the Teleport agent on GCP virtual machines, Teleport will serve an
-install script at `/webapi/scripts/{installer-resource-name}`. Installer scripts will
-be editable as a resource.
-
-Example resource script:
+Teleport agents will be installed on GCP virtual machines using the installer
+scripts that are already served at `/webapi/scripts/{installer-resource-name}`,
+just like EC2 and Azure auto-discovery.
 
 ```yaml
 kind: installer
@@ -98,10 +96,7 @@ spec:
   expires: 0001-01-01T00:00:00Z
 ```
 
-Unless overridden by a user, a default teleport installer command will be
-generated that is appropriate for the current running version and operating
-system initially supporting DEB and RPM based distros that Teleport already
-provides packages for.
+The default installer will be extended to support GCP.
 
 To run commands on a VM, the Discovery Service will create a short-lived
 ssh key pair and add the public key to the VM via its metadata. Then it will
@@ -150,12 +145,10 @@ spec:
         # Regions and/or zones from which nodes can join. If empty or omitted,
         # nodes from any location are allowed.
         locations: ['l1', 'l2']
-        # Emails associated with service accounts assigned to joining nodes. If
-        # empty or omitted, nodes with any email are allowed.
-        emails: ['e1@example.com', 'e2@example.com']
-        # Names of joining instances. If empty or omitted, nodes with any name
-        # are allowed.
-        instance_names: ['i1', 'i2']
+        # Emails of service accounts associated with service accounts assigned
+        # to joining nodes. If empty or omitted, nodes with any email are
+        # allowed.
+        service_accounts: ['e1@example.com', 'e2@example.com']
 ```
 
 The `google.compute_engine.project_id` and `google.compute_engine.zone` JWT
@@ -253,6 +246,24 @@ GCP does not have a dedicated "Run command" API; commands on VMs are instead
 executed over SSH, with access managed with keys in the VM's
 metadata. There is no permission specifically for running commands; the most
 limiting one is `compute.instances.setMetadata`.
+
+## IaC
+
+### Terraform
+
+The `gcp` join method extents `ProvisionTokenV2`, so no extra work will be
+needed for the Terraform provider.
+
+### Helm charts
+
+Helm charts will need to be extended to support the GCP discovery service.
+However, since the Helm charts don't currently support any discovery services,
+that work is better saved for when we add discovery support in general.
+
+### Kube operator
+
+Provision tokens are not currently supported by the Kube operator. If we add
+support for GCP joining, we should do so as part of general token support.
 
 ## Links
 
