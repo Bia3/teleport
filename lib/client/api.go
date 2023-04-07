@@ -2174,28 +2174,34 @@ func isRemoteDest(name string) bool {
 
 // ListNodesWithFilters returns a list of nodes connected to a proxy
 func (tc *TeleportClient) ListNodesWithFilters(ctx context.Context) ([]types.Server, error) {
+	req := tc.DefaultResourceFilter()
+	req.ResourceType = types.KindNode
+
 	ctx, span := tc.Tracer.Start(
 		ctx,
 		"teleportClient/ListNodesWithFilters",
 		oteltrace.WithSpanKind(oteltrace.SpanKindClient),
+		oteltrace.WithAttributes(
+			attribute.Int("limit", int(req.Limit)),
+			attribute.String("predicate", req.PredicateExpression),
+			attribute.StringSlice("keywords", req.SearchKeywords),
+		),
 	)
 	defer span.End()
 
-	// connect to the proxy and ask it to return a full list of servers
-	proxyClient, err := tc.ConnectToProxy(ctx)
+	clt, err := tc.ConnectToCluster(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	defer proxyClient.Close()
+	defer clt.Close()
 
-	filter := tc.DefaultResourceFilter()
-	filter.ResourceType = types.KindNode
-	servers, err := proxyClient.FindNodesByFilters(ctx, *filter)
+	resources, err := client.GetResourcesWithFilters(ctx, clt.AuthClient, *req)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
-	return servers, nil
+	servers, err := types.ResourcesWithLabels(resources).AsServers()
+	return servers, trace.Wrap(err)
 }
 
 // GetClusterAlerts returns a list of matching alerts from the current cluster.
@@ -2796,7 +2802,14 @@ func (tc *TeleportClient) ConnectToCluster(ctx context.Context) (*ClusterClient,
 		return nil, trace.Wrap(err)
 	}
 
-	aclt, err := auth.NewClient(pclt.ClientConfig(ctx, pclt.ClusterName()))
+	cluster := tc.SiteName
+	connected := pclt.ClusterName()
+	root, err := tc.rootClusterName()
+	if err == nil && len(tc.JumpHosts) > 0 && connected != root {
+		cluster = connected
+	}
+
+	aclt, err := auth.NewClient(pclt.ClientConfig(ctx, cluster))
 	if err != nil {
 		return nil, trace.NewAggregate(err, pclt.Close())
 	}
@@ -2806,6 +2819,7 @@ func (tc *TeleportClient) ConnectToCluster(ctx context.Context) (*ClusterClient,
 		ProxyClient: pclt,
 		AuthClient:  aclt,
 		Tracer:      tc.Tracer,
+		cluster:     cluster,
 	}, nil
 }
 

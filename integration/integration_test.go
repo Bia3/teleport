@@ -1281,25 +1281,26 @@ func testEscapeSequenceNoTrigger(t *testing.T, terminal *Terminal, sess <-chan e
 
 type localAddr struct {
 	mu   sync.Mutex
-	addr net.Addr
+	addr map[string]struct{}
 }
 
-func (a *localAddr) set(addr net.Addr) {
+func newLocalAddr() *localAddr {
+	return &localAddr{addr: map[string]struct{}{}}
+}
+
+func (a *localAddr) add(addr net.Addr) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	a.addr = addr
+	a.addr[addr.String()] = struct{}{}
 }
 
-func (a *localAddr) get() net.Addr {
+func (a *localAddr) matches(address net.Addr) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.addr == nil {
-		return &utils.NetAddr{}
-	}
-
-	return a.addr
+	_, ok := a.addr[address.String()]
+	return ok
 }
 
 // testIPPropagation makes sure that we can correctly propagate initial client IP observed by proxy.
@@ -1413,9 +1414,10 @@ func testIPPropagation(t *testing.T, suite *integrationTestSuite) {
 		tc.Stdout = person
 		tc.Stdin = person
 
-		local := &localAddr{}
+		local := newLocalAddr()
 
 		tc.Config.DialOpts = []grpc.DialOption{
+			grpc.WithBlock(),
 			grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 				d := net.Dialer{Timeout: defaults.DefaultIOTimeout}
 				conn, err := d.DialContext(ctx, "tcp", s)
@@ -1423,7 +1425,7 @@ func testIPPropagation(t *testing.T, suite *integrationTestSuite) {
 					return nil, trace.Wrap(err)
 				}
 
-				local.set(conn.LocalAddr())
+				local.add(conn.LocalAddr())
 				return conn, nil
 			}),
 		}
@@ -1445,7 +1447,9 @@ func testIPPropagation(t *testing.T, suite *integrationTestSuite) {
 		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
-			return getRemoteAddrString(person.Output(1000)) == local.get().String()
+			remote := getRemoteAddrString(person.Output(1000))
+			found := local.matches(&utils.NetAddr{Addr: remote})
+			return found
 		}, time.Millisecond*100, time.Millisecond*10, "client IP:port that node sees doesn't match to real one")
 	}
 
@@ -1459,7 +1463,7 @@ func testIPPropagation(t *testing.T, suite *integrationTestSuite) {
 		})
 		require.NoError(t, err)
 
-		local := &localAddr{}
+		local := newLocalAddr()
 
 		tc.Config.DialOpts = []grpc.DialOption{
 			grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
@@ -1469,7 +1473,7 @@ func testIPPropagation(t *testing.T, suite *integrationTestSuite) {
 					return nil, trace.Wrap(err)
 				}
 
-				local.set(conn.LocalAddr())
+				local.add(conn.LocalAddr())
 				return conn, nil
 			}),
 		}
@@ -1480,7 +1484,7 @@ func testIPPropagation(t *testing.T, suite *integrationTestSuite) {
 
 		pingResp, err := clt.AuthClient.Ping(ctx)
 		require.NoError(t, err)
-		require.Equal(t, local.get().String(), pingResp.RemoteAddr, "client IP:port that auth server sees doesn't match the real one")
+		require.True(t, local.matches(&utils.NetAddr{Addr: pingResp.RemoteAddr}), "client IP:port that auth server sees doesn't match the real one")
 	}
 
 	testSSHAuthConnection := func(t *testing.T, instance *helpers.TeleInstance, clusterName string) {
@@ -2117,7 +2121,7 @@ func testEnvironmentVariables(t *testing.T, suite *integrationTestSuite) {
 }
 
 // TestInvalidLogins validates that you can't login with invalid login or
-// with invalid 'site' parameter
+// with invalid 'cluster' parameter
 func testInvalidLogins(t *testing.T, suite *integrationTestSuite) {
 	tr := utils.NewTracer(utils.ThisFunction()).Start()
 	defer tr.Stop()
@@ -2139,8 +2143,7 @@ func testInvalidLogins(t *testing.T, suite *integrationTestSuite) {
 	require.NoError(t, err)
 
 	err = tc.SSH(context.Background(), cmd, false)
-	require.True(t, trace.IsNotFound(err))
-	require.Contains(t, err.Error(), `cluster "wrong-site" is not found`)
+	require.True(t, trace.IsConnectionProblem(err), err.Error())
 }
 
 // TestTwoClustersTunnel creates two teleport clusters: "a" and "b" and creates a
@@ -2994,12 +2997,10 @@ func trustedClusters(t *testing.T, suite *integrationTestSuite, test trustedClus
 	})
 	require.True(t, trace.IsNotFound(err))
 
-	// ListNodes expect labels as a value of host
-	tc.Host = ""
+	// check that we can list resources for the cluster.
 	servers, err := tc.ListNodesWithFilters(ctx)
 	require.NoError(t, err)
 	require.Len(t, servers, 2)
-	tc.Host = Loopback
 
 	// check that remote cluster has been provisioned
 	remoteClusters, err := main.Process.GetAuthServer().GetRemoteClusters()

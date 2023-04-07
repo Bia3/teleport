@@ -25,6 +25,7 @@ import (
 	"github.com/gravitational/teleport/api/client/proto"
 	proxyclient "github.com/gravitational/teleport/api/client/proxy"
 	"github.com/gravitational/teleport/lib/auth"
+	"github.com/gravitational/teleport/lib/events"
 )
 
 // ClusterClient facilitates communicating with both the
@@ -34,17 +35,13 @@ type ClusterClient struct {
 	ProxyClient *proxyclient.Client
 	AuthClient  auth.ClientI
 	Tracer      oteltrace.Tracer
+	cluster     string
 }
 
 // ClusterName returns the name of the cluster that the client
 // is connected to.
 func (c *ClusterClient) ClusterName() string {
-	cluster := c.ProxyClient.ClusterName()
-	if len(c.tc.JumpHosts) > 0 && cluster != "" {
-		return cluster
-	}
-
-	return c.tc.SiteName
+	return c.cluster
 }
 
 // Close terminates the connections to Auth and Proxy.
@@ -87,12 +84,19 @@ func (c *ClusterClient) SessionSSHConfig(ctx context.Context, user string, targe
 
 	mfaClt := c
 	if target.Cluster != rootClusterName {
-		jumpHosts := c.tc.JumpHosts
+		tc := TeleportClient{
+			Config:                   c.tc.Config,
+			localAgent:               c.tc.localAgent,
+			OnShellCreated:           c.tc.OnShellCreated,
+			eventsCh:                 make(chan events.EventFields, 1024),
+			lastPing:                 c.tc.lastPing,
+			dtAttemptLoginIgnorePing: c.tc.dtAttemptLoginIgnorePing,
+			dtAuthnRunCeremony:       c.tc.dtAuthnRunCeremony,
+		}
 		// In case of MFA connect to root teleport proxy instead of JumpHost to request
 		// MFA certificates.
-		c.tc.JumpHosts = nil
+		tc.JumpHosts = nil
 		clt, err := c.tc.ConnectToCluster(ctx)
-		c.tc.JumpHosts = jumpHosts
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
