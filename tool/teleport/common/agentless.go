@@ -48,7 +48,7 @@ const sshdBinary = "sshd"
 
 const sshdConfigSectionModificationHeader = "### Created by 'teleport join openssh', do not edit"
 
-const (
+var (
 	// agentlessSSHDConfigPath is the path to write teleport specific SSHD config options
 	agentlessSSHDConfigPath = "/etc/teleport/agentless_sshd.conf"
 	// agentlessSSHDConfig is Include directive added to the sshd_config file
@@ -655,8 +655,7 @@ func prefixSSHDConfig(sshdConfigPath, config string) error {
 }
 
 func fmtSSHDConfigUpdate(openSSHCAPath string, hostKeyPaths, hostCertPaths []string) string {
-	return fmt.Sprintf(`
-%s
+	return fmt.Sprintf(`%s
 TrustedUserCaKeys %s
 HostKey %s
 HostCertificate %s

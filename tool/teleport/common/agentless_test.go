@@ -25,15 +25,18 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jonboulle/clockwork"
+	"github.com/stretchr/testify/require"
+
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/auth"
 	"github.com/gravitational/teleport/lib/config"
 	"github.com/gravitational/teleport/lib/utils"
-	"github.com/jonboulle/clockwork"
-	"github.com/stretchr/testify/require"
 )
 
 func TestAgentless(t *testing.T) {
+	t.Parallel()
+
 	clock := clockwork.NewFakeClock()
 	tt, err := auth.NewTestAuthServer(auth.TestAuthServerConfig{
 		ClusterName: "cluster",
@@ -47,14 +50,17 @@ func TestAgentless(t *testing.T) {
 	require.NoError(t, err)
 	defer server.Close()
 
+	require.NoError(t, server.Auth().UpsertNamespace(types.DefaultNamespace()))
+
 	testdir := t.TempDir()
 	addr := utils.FromAddr(server.Addr())
 	uuid := uuid.NewString()
 
 	keysDir := filepath.Join(testdir, "keys")
-	require.NoError(t, os.MkdirAll(keysDir, 0700))
 	backupKeysDir := filepath.Join(testdir, "keys_backup")
-	require.NoError(t, os.MkdirAll(backupKeysDir, 0700))
+
+	agentlessSSHDConfigPath = filepath.Join(testdir, "agentless_sshd.conf")
+	agentlessSSHDConfigInclude = "Include " + agentlessSSHDConfigPath
 
 	var sshdRestarted bool
 	ag := agentless{
@@ -62,6 +68,9 @@ func TestAgentless(t *testing.T) {
 		principals:           []string{uuid},
 		hostname:             "hostname",
 		proxyAddr:            &addr,
+		accountID:            "acid",
+		instanceID:           "inst",
+		instanceAddr:         "localhost:22",
 		imds:                 nil,
 		defaultKeysDir:       keysDir,
 		defaultBackupKeysDir: backupKeysDir,
@@ -95,47 +104,76 @@ func TestAgentless(t *testing.T) {
 		JoinMethod:            "token",
 		AuthToken:             "join-token",
 		InsecureMode:          true,
+		RestartOpenSSH:        true,
 	}
 
 	err = ag.openSSHInitialJoin(ctx, clf)
 	require.NoError(t, err)
+	_, err = server.Auth().GetNode(ctx, "default", uuid)
+	require.NoError(t, err)
+
 	checkKeysExist(t, keysDir)
 	require.True(t, sshdRestarted)
-	checkConfigFile(t, keysDir, configPath)
+	checkConfigFile(t, keysDir, configPath, agentlessSSHDConfigPath)
+	compareCAFiles(t, ctx, server.Auth(), filepath.Join(keysDir, teleportOpenSSHCA))
 
 	rotate(ctx, t, server.Auth())
-
-	err = ag.openSSHRotateStageUpdate(ctx, clf)
+	err = ag.openSSHInitialJoin(ctx, clf)
 
 	require.NoError(t, err)
 	checkKeysExist(t, backupKeysDir)
+	compareCAFiles(t, ctx, server.Auth(), filepath.Join(keysDir, teleportOpenSSHCA))
 
-	err = ag.openSSHRotateStageRollback(clf)
+	err = server.Auth().RotateCertAuthority(ctx, auth.RotateRequest{
+		Type:        types.OpenSSHCA,
+		TargetPhase: types.RotationPhaseRollback,
+		Mode:        types.RotationModeManual,
+	})
+	require.NoError(t, err)
+
+	err = ag.openSSHRotateStageRollback(ctx, clf)
 	require.NoError(t, err)
 	checkKeysExist(t, keysDir)
 	_, err = os.Stat(backupKeysDir)
 	require.True(t, os.IsNotExist(err))
 }
 
-func checkConfigFile(t *testing.T, keyDir, configPath string) {
+func compareCAFiles(t *testing.T, ctx context.Context, server *auth.Server, caFile string) {
+	t.Helper()
+	contents, err := os.ReadFile(caFile)
+	require.NoError(t, err)
+	cas, err := server.GetCertAuthorities(ctx, types.OpenSSHCA, false)
+	require.NoError(t, err)
+
+	var openSSHCA []byte
+	for _, ca := range cas {
+		for _, key := range ca.GetTrustedSSHKeyPairs() {
+			openSSHCA = append(openSSHCA, key.PublicKey...)
+		}
+	}
+	require.Equal(t, string(openSSHCA), string(contents))
+}
+
+func checkConfigFile(t *testing.T, keyDir, configPath, teleportAgentlessPath string) {
 	t.Helper()
 	configContents, err := os.ReadFile(configPath)
 	require.NoError(t, err)
+	require.Equal(t, "Include "+teleportAgentlessPath+"\n", string(configContents))
 
-	expected := fmt.Sprintf(`
-%s
+	expected := fmt.Sprintf(`%s
 TrustedUserCaKeys %s
 HostKey %s
 HostCertificate %s
-### Section end
 `,
 		sshdConfigSectionModificationHeader,
 		filepath.Join(keyDir, "teleport_user_ca.pub"),
 		filepath.Join(keyDir, "teleport"),
 		filepath.Join(keyDir, "teleport-cert.pub"),
 	)
+	configContents, err = os.ReadFile(teleportAgentlessPath)
+	require.NoError(t, err)
 
-	require.Equal(t, expected, configContents)
+	require.Equal(t, expected, string(configContents))
 }
 
 func checkKeysExist(t *testing.T, keysDir string) {
@@ -166,13 +204,6 @@ func rotate(ctx context.Context, t *testing.T, server *auth.Server) {
 	err = server.RotateCertAuthority(ctx, auth.RotateRequest{
 		Type:        types.OpenSSHCA,
 		TargetPhase: types.RotationPhaseUpdateServers,
-		Mode:        types.RotationModeManual,
-	})
-	require.NoError(t, err)
-
-	err = server.RotateCertAuthority(ctx, auth.RotateRequest{
-		Type:        types.OpenSSHCA,
-		TargetPhase: types.RotationPhaseStandby,
 		Mode:        types.RotationModeManual,
 	})
 	require.NoError(t, err)
