@@ -145,14 +145,11 @@ func (a *aksFetcher) String() string {
 		a.ResourceGroups, a.Regions, a.FilterLabels)
 }
 
-func (a *aksFetcher) MatchingLabels() types.Labels {
-	return a.FilterLabels
-}
-
-func (f *aksFetcher) MatchesResource(r types.ResourceWithLabels) bool {
+func (a *aksFetcher) MatchesResource(r types.ResourceWithLabels) bool {
 	kube, ok := r.(types.KubeCluster)
 	if !ok {
 		return false
 	}
-	return kube.IsAzure()
+	match, _, _ := services.MatchLabels(a.FilterLabels, r.GetAllLabels())
+	return kube.IsAzure() && match
 }

@@ -91,6 +91,6 @@ func (f *azureManagedSQLServerFetcher) isAvailable(server *armsql.ManagedInstanc
 	}
 }
 
-func (f *azureManagedSQLServerFetcher) MatchesResource(db types.Database) bool {
+func (f *azureManagedSQLServerFetcher) matchesResource(db types.Database) bool {
 	return db.GetType() == types.DatabaseTypeAzure && db.GetProtocol() == defaults.ProtocolSQLServer
 }

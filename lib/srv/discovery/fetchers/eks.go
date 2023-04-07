@@ -196,14 +196,11 @@ func (a *eksFetcher) getMatchingKubeCluster(ctx context.Context, clusterName str
 	return cluster, nil
 }
 
-func (a *eksFetcher) MatchingLabels() types.Labels {
-	return a.FilterLabels
-}
-
-func (f *eksFetcher) MatchesResource(r types.ResourceWithLabels) bool {
+func (a *eksFetcher) MatchesResource(r types.ResourceWithLabels) bool {
 	kube, ok := r.(types.KubeCluster)
 	if !ok {
 		return false
 	}
-	return kube.IsAWS()
+	match, _, _ := services.MatchLabels(a.FilterLabels, r.GetAllLabels())
+	return kube.IsAWS() && match
 }

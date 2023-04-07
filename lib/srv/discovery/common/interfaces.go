@@ -26,11 +26,10 @@ import (
 type Fetcher interface {
 	// Get returns the list of resources from the cloud after applying the filters.
 	Get(ctx context.Context) (types.ResourcesWithLabels, error)
-	// MatchingLabels returns the labels that the fetcher is matching.
-	MatchingLabels() types.Labels
 	// ResourceType identifies the resource type the fetcher is returning.
 	ResourceType() string
-	// ResourceSubType identifies the resource sub-type the fetcher is returning.
+	// MatchesResource matches the provided Auth resource with the fetcher's resource type
+	// and labels.
 	MatchesResource(types.ResourceWithLabels) bool
 	// Cloud returns the cloud the fetcher is operating.
 	Cloud() string

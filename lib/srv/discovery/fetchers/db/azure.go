@@ -26,6 +26,7 @@ import (
 	"github.com/gravitational/teleport/api/types"
 	azureutils "github.com/gravitational/teleport/api/utils/azure"
 	"github.com/gravitational/teleport/lib/cloud"
+	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/srv/discovery/common"
 	"github.com/gravitational/teleport/lib/utils"
 )
@@ -48,9 +49,9 @@ type azureFetcherPlugin[DBType comparable, ListClient azureListClient[DBType]] i
 	GetServerLocation(server DBType) string
 	// NewDatabaseFromServer creates a types.Database from provided server.
 	NewDatabaseFromServer(server DBType, log logrus.FieldLogger) types.Database
-	// MatchesResource returns true if the provided resource matches the fetcher's
+	// matchesResource returns true if the provided resource matches the fetcher's
 	// resource type.
-	MatchesResource(types.Database) bool
+	matchesResource(types.Database) bool
 }
 
 // newAzureFetcher returns a Azure DB server fetcher for the provided subscription, group, regions, and tags.
@@ -237,16 +238,11 @@ func (f *azureFetcher[DBType, ListClient]) String() string {
 		f.cfg.Type, f.cfg.Subscription, f.cfg.ResourceGroup, f.cfg.Regions, f.cfg.Labels)
 }
 
-// MatchingLabels returns the labels that the fetcher is matching.
-func (f *azureFetcher[DBType, ListClient]) MatchingLabels() types.Labels {
-	return f.cfg.Labels
-}
-
 func (f *azureFetcher[DBType, ListClient]) MatchesResource(r types.ResourceWithLabels) bool {
 	db, ok := r.(types.Database)
 	if !ok {
 		return false
 	}
-
-	return f.azureFetcherPlugin.MatchesResource(db)
+	match, _, _ := services.MatchLabels(f.cfg.Labels, r.GetAllLabels())
+	return f.azureFetcherPlugin.matchesResource(db) && match
 }

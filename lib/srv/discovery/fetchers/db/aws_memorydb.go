@@ -205,15 +205,11 @@ func getMemoryDBResourceTags(ctx context.Context, client memorydbiface.MemoryDBA
 	return output.TagList, nil
 }
 
-// MatchingLabels returns the labels that the fetcher is matching.
-func (f *memoryDBFetcher) MatchingLabels() types.Labels {
-	return f.cfg.Labels
-}
-
 func (f *memoryDBFetcher) MatchesResource(r types.ResourceWithLabels) bool {
 	db, ok := r.(types.Database)
 	if !ok {
 		return false
 	}
-	return db.IsMemoryDB() && !db.GetAWS().IsEmpty()
+	match, _, _ := services.MatchLabels(f.cfg.Labels, r.GetAllLabels())
+	return db.IsMemoryDB() && match
 }

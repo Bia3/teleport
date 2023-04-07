@@ -164,10 +164,11 @@ func (a *gkeFetcher) MatchingLabels() types.Labels {
 	return a.FilterLabels
 }
 
-func (f *gkeFetcher) MatchesResource(r types.ResourceWithLabels) bool {
+func (a *gkeFetcher) MatchesResource(r types.ResourceWithLabels) bool {
 	kube, ok := r.(types.KubeCluster)
 	if !ok {
 		return false
 	}
-	return kube.IsGCP()
+	match, _, _ := services.MatchLabels(a.FilterLabels, r.GetAllLabels())
+	return kube.IsGCP() && match
 }

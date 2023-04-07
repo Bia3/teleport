@@ -357,22 +357,14 @@ func isUnrecognizedAWSEngineNameError(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "unrecognized engine name")
 }
 
-// MatchingLabels returns the labels that the fetcher is matching.
-func (f *rdsDBInstancesFetcher) MatchingLabels() types.Labels {
-	return f.cfg.Labels
-}
-
 func (f *rdsDBInstancesFetcher) MatchesResource(r types.ResourceWithLabels) bool {
 	db, ok := r.(types.Database)
 	if !ok {
 		return false
 	}
-	return db.IsRDS() && db.GetAWS().RDS.InstanceID != ""
-}
-
-// MatchingLabels returns the labels that the fetcher is matching.
-func (f *rdsAuroraClustersFetcher) MatchingLabels() types.Labels {
-	return f.cfg.Labels
+	match, _, _ := services.MatchLabels(f.cfg.Labels, r.GetAllLabels())
+	// If the database is an RDS instance, it will have an InstanceID associated.
+	return db.IsRDS() && db.GetAWS().RDS.InstanceID != "" && match
 }
 
 func (f *rdsAuroraClustersFetcher) MatchesResource(r types.ResourceWithLabels) bool {
@@ -380,5 +372,7 @@ func (f *rdsAuroraClustersFetcher) MatchesResource(r types.ResourceWithLabels) b
 	if !ok {
 		return false
 	}
-	return db.IsRDS() && db.GetAWS().RDS.InstanceID == "" && !db.GetAWS().IsEmpty()
+	match, _, _ := services.MatchLabels(f.cfg.Labels, r.GetAllLabels())
+	// If the database is an RDS cluster, it will not have an InstanceID associated.
+	return db.IsRDS() && db.GetAWS().RDS.InstanceID == "" && match
 }

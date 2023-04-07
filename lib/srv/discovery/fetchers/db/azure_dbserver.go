@@ -22,22 +22,25 @@ import (
 
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/cloud/azure"
+	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/srv/discovery/common"
 )
 
 // newAzureMySQLFetcher creates a fetcher for Azure MySQL.
 func newAzureMySQLFetcher(config azureFetcherConfig) (common.Fetcher, error) {
-	return newAzureFetcher[*azure.DBServer, azure.DBServersClient](config, &azureDBServerPlugin{})
+	return newAzureFetcher[*azure.DBServer, azure.DBServersClient](config, &azureDBServerPlugin{protocol: defaults.ProtocolMySQL})
 }
 
 // newAzureMySQLFetcher creates a fetcher for Azure PostgresSQL.
 func newAzurePostgresFetcher(config azureFetcherConfig) (common.Fetcher, error) {
-	return newAzureFetcher[*azure.DBServer, azure.DBServersClient](config, &azureDBServerPlugin{})
+	return newAzureFetcher[*azure.DBServer, azure.DBServersClient](config, &azureDBServerPlugin{protocol: defaults.ProtocolPostgres})
 }
 
 // azureDBServerPlugin implements azureFetcherPlugin for MySQL and PostgresSQL.
-type azureDBServerPlugin struct{}
+type azureDBServerPlugin struct {
+	protocol string
+}
 
 func (p *azureDBServerPlugin) GetListClient(cfg *azureFetcherConfig, subID string) (azure.DBServersClient, error) {
 	switch cfg.Type {
@@ -81,6 +84,6 @@ func (p *azureDBServerPlugin) NewDatabaseFromServer(server *azure.DBServer, log 
 	return database
 }
 
-func (f *azureDBServerPlugin) MatchesResource(db types.Database) bool {
-	return db.GetType() == types.DatabaseTypeAzure
+func (f *azureDBServerPlugin) matchesResource(db types.Database) bool {
+	return db.GetType() == types.DatabaseTypeAzure && f.protocol == db.GetProtocol() && !db.GetAzure().IsFlexiServer
 }

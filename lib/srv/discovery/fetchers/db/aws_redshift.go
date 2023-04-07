@@ -140,5 +140,6 @@ func (f *redshiftFetcher) MatchesResource(r types.ResourceWithLabels) bool {
 	if !ok {
 		return false
 	}
-	return db.IsRedshift() && db.GetAWS().Redshift.ClusterID != "" && !db.GetAWS().IsEmpty()
+	match, _, _ := services.MatchLabels(f.cfg.Labels, r.GetAllLabels())
+	return db.IsRedshift() && match
 }

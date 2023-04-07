@@ -83,6 +83,6 @@ func (f *azurePostgresFlexServerFetcher) isAvailable(server *armpostgresqlflexib
 	return true
 }
 
-func (f *azurePostgresFlexServerFetcher) MatchesResource(db types.Database) bool {
-	return db.GetType() == types.DatabaseTypeAzure && db.GetProtocol() == defaults.ProtocolPostgres && db.GetAzure().Redis.ClusteringPolicy != ""
+func (f *azurePostgresFlexServerFetcher) matchesResource(db types.Database) bool {
+	return db.GetType() == types.DatabaseTypeAzure && db.GetProtocol() == defaults.ProtocolPostgres && db.GetAzure().IsFlexiServer
 }

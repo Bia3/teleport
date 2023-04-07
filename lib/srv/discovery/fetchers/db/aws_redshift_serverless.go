@@ -228,5 +228,6 @@ func (f *redshiftServerlessFetcher) MatchesResource(r types.ResourceWithLabels) 
 	if !ok {
 		return false
 	}
-	return db.IsRedshift() && db.GetAWS().RedshiftServerless.WorkgroupName != "" && !db.GetAWS().IsEmpty()
+	match, _, _ := services.MatchLabels(f.cfg.Labels, r.GetAllLabels())
+	return db.GetType() == types.DatabaseTypeRedshiftServerless && match
 }

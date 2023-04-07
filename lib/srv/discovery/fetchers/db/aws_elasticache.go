@@ -253,15 +253,11 @@ func getElastiCacheResourceTags(ctx context.Context, client elasticacheiface.Ela
 	return output.TagList, nil
 }
 
-// MatchingLabels returns the labels that the fetcher is matching.
-func (f *elastiCacheFetcher) MatchingLabels() types.Labels {
-	return f.cfg.Labels
-}
-
 func (f *elastiCacheFetcher) MatchesResource(r types.ResourceWithLabels) bool {
 	db, ok := r.(types.Database)
 	if !ok {
 		return false
 	}
-	return db.IsElastiCache() && !db.GetAWS().IsEmpty()
+	match, _, _ := services.MatchLabels(f.cfg.Labels, r.GetAllLabels())
+	return db.IsElastiCache() && match
 }

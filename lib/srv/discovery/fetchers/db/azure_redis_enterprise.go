@@ -98,6 +98,6 @@ func (p *azureRedisEnterprisePlugin) isAvailable(server *azure.RedisEnterpriseDa
 	}
 }
 
-func (f *azureRedisEnterprisePlugin) MatchesResource(db types.Database) bool {
+func (f *azureRedisEnterprisePlugin) matchesResource(db types.Database) bool {
 	return db.GetType() == types.DatabaseTypeAzure && db.GetProtocol() == defaults.ProtocolRedis && db.GetAzure().Redis.ClusteringPolicy != ""
 }

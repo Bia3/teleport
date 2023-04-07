@@ -224,5 +224,6 @@ func (f *rdsDBProxyFetcher) MatchesResource(r types.ResourceWithLabels) bool {
 	if !ok {
 		return false
 	}
-	return db.IsRDSProxy() && !db.GetAWS().IsEmpty()
+	match, _, _ := services.MatchLabels(f.cfg.Labels, r.GetAllLabels())
+	return db.IsRDSProxy() && match
 }

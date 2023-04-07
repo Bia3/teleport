@@ -55,6 +55,6 @@ func (f *azureSQLServerFetcher) NewDatabaseFromServer(server *armsql.Server, log
 	return database
 }
 
-func (f *azureSQLServerFetcher) MatchesResource(db types.Database) bool {
+func (f *azureSQLServerFetcher) matchesResource(db types.Database) bool {
 	return db.GetType() == types.DatabaseTypeAzure && db.GetProtocol() == defaults.ProtocolSQLServer
 }

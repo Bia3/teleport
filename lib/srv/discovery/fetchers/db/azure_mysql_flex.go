@@ -83,6 +83,6 @@ func (f *azureMySQLFlexServerFetcher) isAvailable(server *armmysqlflexibleserver
 	return true
 }
 
-func (f *azureMySQLFlexServerFetcher) MatchesResource(db types.Database) bool {
-	return db.GetType() == types.DatabaseTypeAzure && db.GetProtocol() == defaults.ProtocolMySQL
+func (f *azureMySQLFlexServerFetcher) matchesResource(db types.Database) bool {
+	return db.GetType() == types.DatabaseTypeAzure && db.GetProtocol() == defaults.ProtocolMySQL && db.GetAzure().IsFlexiServer
 }
