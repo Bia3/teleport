@@ -1290,8 +1290,8 @@ message ProvisionTokenSpecV2GCP {
     repeated string ProjectIDs = 1 [(gogoproto.jsontag) = "project_ids,omitempty"];
     // Locations is a list of regions and/or zones.
     repeated string Locations = 2 [(gogoproto.jsontag) = "locations,omitempty"];
-    // Emails is a list of emails.
-    repeated string Emails = 3 [(gogoproto.jsontag) = "emails,omitempty"];
+    // ServiceAccounts is a list of service account emails.
+    repeated string ServiceAccounts = 3 [(gogoproto.jsontag) = "service_accounts,omitempty"];
     // InstanceNames is a list of instance names.
     repeated string InstanceNames = 4 [(gogoproto.jsontag) = "instance_names,omitempty"];
   }
