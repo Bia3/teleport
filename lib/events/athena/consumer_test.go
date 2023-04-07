@@ -111,7 +111,7 @@ func Test_consumer_sqsMessagesCollector(t *testing.T) {
 
 	t.Run("scenario 2", func(t *testing.T) {
 		// Given SqsMessagesCollector reading from fake sqs with random wait time on receiveMessage call
-		// When ctx is cancelled
+		// When ctx is canceled
 		// Then reading chan is closed.
 
 		// Given
