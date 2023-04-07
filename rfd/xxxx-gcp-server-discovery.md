@@ -173,9 +173,7 @@ new /etc/teleport.yaml file:
 teleport node configure
     --auth-server=auth-server.example.com [auth server that is being connected to]
     --token="$1" # name of the join token, passed via parameter from run-command
-    --labels="teleport.internal/projectId=${PROJECT_ID},\
-    teleport.internal/zone=${ZONE},\
-    teleport.internal/discovered-node=yes,\
+    --labels="teleport.internal/discovered-node=yes,\
     teleport.internal/discovered-by=$2,\
     teleport.internal/origin=cloud" # sourced from instance metadata
 ```
@@ -196,6 +194,10 @@ ssh_service:
     teleport.internal/projectId: '<project-id>'
     teleport.internal/zone: '<zone>'
 ```
+
+GCP-specific labels (`teleport.internal/project-id`, `teleport.internal/zone`)
+will be added by Teleport using the process outlined in
+[RFD 22033](https://github.com/gravitational/teleport/pull/22033).
 
 ## UX
 
