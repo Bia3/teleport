@@ -16,10 +16,10 @@ limitations under the License.
 
 package gcp
 
-// DefaultIssuerHost is the issuer for GCP ID tokens.
-const DefaultIssuerHost = "accounts.google.com"
+// defaultIssuerHost is the issuer for GCP ID tokens.
+const defaultIssuerHost = "accounts.google.com"
 
-type computeEngine struct {
+type ComputeEngine struct {
 	// The ID of the instance's project.
 	ProjectID string `json:"project_id"`
 	// The instance's zone.
@@ -30,11 +30,12 @@ type computeEngine struct {
 	InstanceName string `json:"instance_name"`
 }
 
-type google struct {
-	ComputeEngine computeEngine `json:"compute_engine"`
+type Google struct {
+	ComputeEngine ComputeEngine `json:"compute_engine"`
 }
 
 // IDTokenClaims is the set of claims in a GCP ID token.
 type IDTokenClaims struct {
-	Google google `json:"google"`
+	Email  string `json:"email"`
+	Google Google `json:"google"`
 }

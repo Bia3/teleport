@@ -30,7 +30,7 @@ import (
 
 type IDTokenValidatorConfig struct {
 	Clock      clockwork.Clock
-	IssuerHost string
+	issuerHost string
 	insecure   bool
 }
 
@@ -42,8 +42,8 @@ func NewIDTokenValidator(cfg IDTokenValidatorConfig) *IDTokenValidator {
 	if cfg.Clock == nil {
 		cfg.Clock = clockwork.NewRealClock()
 	}
-	if cfg.IssuerHost == "" {
-		cfg.IssuerHost = DefaultIssuerHost
+	if cfg.issuerHost == "" {
+		cfg.issuerHost = defaultIssuerHost
 	}
 	return &IDTokenValidator{
 		IDTokenValidatorConfig: cfg,
@@ -55,7 +55,7 @@ func (id *IDTokenValidator) issuerURL() string {
 	if id.insecure {
 		scheme = "http"
 	}
-	return fmt.Sprintf("%s://%s", scheme, id.IssuerHost)
+	return fmt.Sprintf("%s://%s", scheme, id.issuerHost)
 }
 
 func (id *IDTokenValidator) Validate(ctx context.Context, token string) (*IDTokenClaims, error) {
