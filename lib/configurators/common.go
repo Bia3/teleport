@@ -52,6 +52,10 @@ type BootstrapFlags struct {
 	ForceAWSKeyspacesPermissions bool
 	// ForceDynamoDBPermissions forces the presence of DynamoDB permissions.
 	ForceDynamoDBPermissions bool
+	// ForceBoundaryAssumeRoles forces the presence of sts:AssumeRole permission in boundary policy.
+	ForceBoundaryAssumeRoles bool
+	// ForceExternalAssumeRoles forces the presence of additional external AWS IAM roles to assume.
+	ForceExternalAssumeRoles []string
 }
 
 // ConfiguratorActionContext context passed across configurator actions. It is

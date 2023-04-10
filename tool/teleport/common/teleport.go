@@ -318,6 +318,12 @@ func Run(options Options) (app *kingpin.Application, executedCommand string, con
 	dbConfigureAWSPrintIAM.Flag("user", "IAM user name to attach policy to. Mutually exclusive with --role").StringVar(&configureDatabaseAWSPrintFlags.user)
 	dbConfigureAWSPrintIAM.Flag("policy", "Only print IAM policy document.").BoolVar(&configureDatabaseAWSPrintFlags.policyOnly)
 	dbConfigureAWSPrintIAM.Flag("boundary", "Only print IAM boundary policy document.").BoolVar(&configureDatabaseAWSPrintFlags.boundaryOnly)
+	dbConfigureAWSPrintIAM.Flag("assumes-external-roles",
+		"Comma-separated list of external IAM role ARNs to include in the IAM policy document.").
+		StringVar(&configureDatabaseAWSPrintFlags.assumesExternalRoles)
+	dbConfigureAWSPrintIAM.Flag("assumes-roles",
+		"Ensure sts:AssumeRole permissions in boundary policy document for AWS IAM roles. Redundant with --assumes-external-roles.").
+		BoolVar(&configureDatabaseAWSPrintFlags.forceBoundaryAssumeRole)
 	dbConfigureAWSCreateIAM := dbConfigureAWS.Command("create-iam", "Generate, create and attach IAM policies.")
 	dbConfigureAWSCreateIAM.Flag("types",
 		fmt.Sprintf("Comma-separated list of database types to include in the policy. Any of %s", strings.Join(awsDatabaseTypes, ","))).
@@ -328,6 +334,12 @@ func Run(options Options) (app *kingpin.Application, executedCommand string, con
 	dbConfigureAWSCreateIAM.Flag("confirm", "Do not prompt user and auto-confirm all actions.").BoolVar(&configureDatabaseAWSCreateFlags.confirm)
 	dbConfigureAWSCreateIAM.Flag("role", "IAM role name to attach policy to. Mutually exclusive with --user").StringVar(&configureDatabaseAWSCreateFlags.role)
 	dbConfigureAWSCreateIAM.Flag("user", "IAM user name to attach policy to. Mutually exclusive with --role").StringVar(&configureDatabaseAWSCreateFlags.user)
+	dbConfigureAWSCreateIAM.Flag("assumes-external-roles",
+		"Comma-separated list of external IAM role ARNs to include in the IAM policy document.").
+		StringVar(&configureDatabaseAWSCreateFlags.assumesExternalRoles)
+	dbConfigureAWSCreateIAM.Flag("assumes-roles",
+		"Ensure sts:AssumeRole permissions in boundary policy document for AWS IAM roles. Redundant with --assumes-external-roles.").
+		BoolVar(&configureDatabaseAWSCreateFlags.forceBoundaryAssumeRole)
 
 	// "teleport discovery" bootstrap command and subcommnads.
 	discoveryCmd := app.Command("discovery", "Teleport discovery service commands")

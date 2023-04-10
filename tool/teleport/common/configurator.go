@@ -29,6 +29,8 @@ import (
 	"github.com/gravitational/teleport/lib/configurators"
 	awsconfigurators "github.com/gravitational/teleport/lib/configurators/aws"
 	"github.com/gravitational/teleport/lib/configurators/configuratorbuilder"
+	"github.com/gravitational/teleport/lib/service/servicecfg"
+	awsutils "github.com/gravitational/teleport/lib/utils/aws"
 	"github.com/gravitational/teleport/lib/utils/prompt"
 )
 
@@ -175,17 +177,39 @@ type configureDatabaseAWSFlags struct {
 	user string
 	// policyName name of the generated policy.
 	policyName string
+	// forceBoundaryAssumeRole forces sts:AssumeRole in boundary policy.
+	forceBoundaryAssumeRole bool
+	// assumesExternalRoles comma-separated list of external AWS IAM role ARNs that the policy
+	// will include in sts:AssumeRole statement.
+	assumesExternalRoles string
+	// externalRolesList is `assumesExternalRoles` parsed into a list of IAM role ARNs.
+	externalRolesList []string
 }
 
 func (f *configureDatabaseAWSFlags) CheckAndSetDefaults() error {
-	if f.types == "" {
-		return trace.BadParameter("at least one --types should be provided: %s", strings.Join(awsDatabaseTypes, ","))
+	if f.types == "" && f.assumesExternalRoles == "" {
+		return trace.BadParameter("at least one of --assumes-external-roles or --types should be provided. Valid --types: %s",
+			strings.Join(awsDatabaseTypes, ","))
 	}
 
-	f.typesList = strings.Split(f.types, ",")
-	for _, dbType := range f.typesList {
-		if !slices.Contains(awsDatabaseTypes, dbType) {
-			return trace.BadParameter("--types %q not supported. supported types are: %s", dbType, strings.Join(awsDatabaseTypes, ", "))
+	if f.types != "" {
+		f.typesList = strings.Split(f.types, ",")
+		for _, dbType := range f.typesList {
+			if !slices.Contains(awsDatabaseTypes, dbType) {
+				return trace.BadParameter("--types %q not supported. supported types are: %s", dbType, strings.Join(awsDatabaseTypes, ", "))
+			}
+		}
+	}
+
+	if f.assumesExternalRoles != "" {
+		for _, roleARN := range strings.Split(f.assumesExternalRoles, ",") {
+			if roleARN == "" {
+				continue
+			}
+			if _, err := awsutils.ParseRoleARN(roleARN); err != nil {
+				return trace.BadParameter("--assumes-external-roles %q: %v", f.assumesExternalRoles, err)
+			}
+			f.externalRolesList = append(f.externalRolesList, roleARN)
 		}
 	}
 
@@ -210,12 +234,13 @@ func buildAWSConfigurator(manual bool, flags configureDatabaseAWSFlags) (configu
 		return nil, trace.Wrap(err)
 	}
 
-	fileConfig := &config.FileConfig{}
 	configuratorFlags := configurators.BootstrapFlags{
-		Manual:       manual,
-		PolicyName:   flags.policyName,
-		AttachToUser: flags.user,
-		AttachToRole: flags.role,
+		Manual:                   manual,
+		PolicyName:               flags.policyName,
+		AttachToUser:             flags.user,
+		AttachToRole:             flags.role,
+		ForceBoundaryAssumeRoles: flags.forceBoundaryAssumeRole,
+		ForceExternalAssumeRoles: flags.externalRolesList,
 	}
 
 	for _, dbType := range flags.typesList {
@@ -232,12 +257,16 @@ func buildAWSConfigurator(manual bool, flags configureDatabaseAWSFlags) (configu
 			configuratorFlags.ForceElastiCachePermissions = true
 		case types.DatabaseTypeMemoryDB:
 			configuratorFlags.ForceMemoryDBPermissions = true
+		case types.DatabaseTypeAWSKeyspaces:
+			configuratorFlags.ForceAWSKeyspacesPermissions = true
+		case types.DatabaseTypeDynamoDB:
+			configuratorFlags.ForceDynamoDBPermissions = true
 		}
 	}
 
 	configurator, err := awsconfigurators.NewAWSConfigurator(awsconfigurators.ConfiguratorConfig{
-		Flags:      configuratorFlags,
-		FileConfig: fileConfig,
+		Flags:         configuratorFlags,
+		ServiceConfig: &servicecfg.Config{},
 	})
 	if err != nil {
 		return nil, trace.Wrap(err)

@@ -28,8 +28,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/aws/aws-sdk-go/service/sts/stsiface"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/gravitational/trace"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/api/utils"
@@ -37,6 +39,7 @@ import (
 	"github.com/gravitational/teleport/lib/cloud/mocks"
 	"github.com/gravitational/teleport/lib/config"
 	"github.com/gravitational/teleport/lib/configurators"
+	"github.com/gravitational/teleport/lib/service/servicecfg"
 	"github.com/gravitational/teleport/lib/services"
 )
 
@@ -44,11 +47,16 @@ func TestAWSIAMDocuments(t *testing.T) {
 	userTarget, err := awslib.IdentityFromArn("arn:aws:iam::123456789012:user/example-user")
 	require.NoError(t, err)
 
-	roleARN := "arn:aws:iam::123456789012:role/example-role"
-	roleTarget, err := awslib.IdentityFromArn(roleARN)
-	require.NoError(t, err)
+	internalAssumeRole1 := "arn:aws:iam::123456789012:role/internal-role-1"
+	internalAssumeRole2 := "arn:aws:iam::123456789012:role/internal-role-2"
+	internalAssumeRole3 := "arn:aws:iam::123456789012:role/internal-role-3"
+	externalAssumeRole1 := "arn:aws:iam::123456789012:role/external-role-1"
+	externalAssumeRole2 := "arn:aws:iam::123456789012:role/external-role-2"
+	externalAssumeRole3 := "arn:aws:iam::123456789012:role/external-role-3"
 
-	assumedRoleTarget, err := awslib.IdentityFromArn("arn:aws:iam::123456789012:assumed-role/example-role/i-12345")
+	roleTarget, err := awslib.IdentityFromArn(internalAssumeRole1)
+	require.NoError(t, err)
+	assumedRoleTarget, err := awslib.IdentityFromArn("arn:aws:iam::123456789012:assumed-role/internal-role-1/i-12345")
 	require.NoError(t, err)
 
 	unknownIdentity, err := awslib.IdentityFromArn("arn:aws:iam::123456789012:ec2/example-ec2")
@@ -72,6 +80,7 @@ func TestAWSIAMDocuments(t *testing.T) {
 			target: userTarget,
 			fileConfig: &config.FileConfig{
 				Databases: config.Databases{
+					Service: config.Service{EnabledFlag: "true"},
 					AWSMatchers: []config.AWSMatcher{
 						{Types: []string{services.AWSMatcherRDS}, Regions: []string{"us-west-2"}},
 					},
@@ -101,6 +110,7 @@ func TestAWSIAMDocuments(t *testing.T) {
 			target: roleTarget,
 			fileConfig: &config.FileConfig{
 				Databases: config.Databases{
+					Service: config.Service{EnabledFlag: "true"},
 					AWSMatchers: []config.AWSMatcher{
 						{Types: []string{services.AWSMatcherRDS}, Regions: []string{"us-west-2"}},
 					},
@@ -130,6 +140,7 @@ func TestAWSIAMDocuments(t *testing.T) {
 			target: assumedRoleTarget,
 			fileConfig: &config.FileConfig{
 				Databases: config.Databases{
+					Service: config.Service{EnabledFlag: "true"},
 					Databases: []*config.Database{
 						{
 							Name:     "aurora-1",
@@ -144,7 +155,7 @@ func TestAWSIAMDocuments(t *testing.T) {
 					"rds:DescribeDBInstances", "rds:ModifyDBInstance",
 					"rds:DescribeDBClusters", "rds:ModifyDBCluster",
 				}},
-				{Effect: awslib.EffectAllow, Resources: []string{roleARN}, Actions: []string{
+				{Effect: awslib.EffectAllow, Resources: []string{internalAssumeRole1}, Actions: []string{
 					"iam:GetRolePolicy", "iam:PutRolePolicy", "iam:DeleteRolePolicy",
 				}},
 			},
@@ -154,7 +165,7 @@ func TestAWSIAMDocuments(t *testing.T) {
 					"rds:DescribeDBClusters", "rds:ModifyDBCluster",
 					"rds-db:connect",
 				}},
-				{Effect: awslib.EffectAllow, Resources: []string{roleARN}, Actions: []string{
+				{Effect: awslib.EffectAllow, Resources: []string{internalAssumeRole1}, Actions: []string{
 					"iam:GetRolePolicy", "iam:PutRolePolicy", "iam:DeleteRolePolicy",
 				}},
 			},
@@ -163,6 +174,7 @@ func TestAWSIAMDocuments(t *testing.T) {
 			target: userTarget,
 			fileConfig: &config.FileConfig{
 				Databases: config.Databases{
+					Service: config.Service{EnabledFlag: "true"},
 					AWSMatchers: []config.AWSMatcher{
 						{Types: []string{services.AWSMatcherRedshift}, Regions: []string{"us-west-2"}},
 					},
@@ -189,6 +201,7 @@ func TestAWSIAMDocuments(t *testing.T) {
 			target: roleTarget,
 			fileConfig: &config.FileConfig{
 				Databases: config.Databases{
+					Service: config.Service{EnabledFlag: "true"},
 					AWSMatchers: []config.AWSMatcher{
 						{Types: []string{services.AWSMatcherRedshift}, Regions: []string{"us-west-2"}},
 					},
@@ -215,10 +228,12 @@ func TestAWSIAMDocuments(t *testing.T) {
 			target: roleTarget,
 			fileConfig: &config.FileConfig{
 				Databases: config.Databases{
+					Service: config.Service{EnabledFlag: "true"},
 					Databases: []*config.Database{
 						{
-							Name: "redshift-cluster-1",
-							URI:  "redshift-cluster-1.abcdefghijkl.us-west-2.redshift.amazonaws.com:5439",
+							Name:     "redshift-cluster-1",
+							Protocol: "postgres",
+							URI:      "redshift-cluster-1.abcdefghijkl.us-west-2.redshift.amazonaws.com:5439",
 						},
 					},
 				},
@@ -244,6 +259,7 @@ func TestAWSIAMDocuments(t *testing.T) {
 			target: roleTarget,
 			fileConfig: &config.FileConfig{
 				Databases: config.Databases{
+					Service: config.Service{EnabledFlag: "true"},
 					AWSMatchers: []config.AWSMatcher{
 						{Types: []string{services.AWSMatcherElastiCache}, Regions: []string{"us-west-2"}},
 					},
@@ -294,14 +310,17 @@ func TestAWSIAMDocuments(t *testing.T) {
 			target: roleTarget,
 			fileConfig: &config.FileConfig{
 				Databases: config.Databases{
+					Service: config.Service{EnabledFlag: "true"},
 					Databases: []*config.Database{
 						{
-							Name: "redis-1",
-							URI:  "clustercfg.redis1.xxxxxx.usw2.cache.amazonaws.com:6379",
+							Name:     "redis-1",
+							Protocol: "redis",
+							URI:      "clustercfg.redis1.xxxxxx.usw2.cache.amazonaws.com:6379",
 						},
 						{
-							Name: "redis-2",
-							URI:  "clustercfg.redis2.xxxxxx.usw2.cache.amazonaws.com:6379",
+							Name:     "redis-2",
+							Protocol: "redis",
+							URI:      "clustercfg.redis2.xxxxxx.usw2.cache.amazonaws.com:6379",
 							AWS: config.DatabaseAWS{
 								SecretStore: config.SecretStore{
 									KeyPrefix: "my-prefix/",
@@ -377,6 +396,7 @@ func TestAWSIAMDocuments(t *testing.T) {
 			target: roleTarget,
 			fileConfig: &config.FileConfig{
 				Databases: config.Databases{
+					Service: config.Service{EnabledFlag: "true"},
 					AWSMatchers: []config.AWSMatcher{
 						{Types: []string{services.AWSMatcherMemoryDB}, Regions: []string{"us-west-2"}},
 					},
@@ -425,14 +445,17 @@ func TestAWSIAMDocuments(t *testing.T) {
 			target: roleTarget,
 			fileConfig: &config.FileConfig{
 				Databases: config.Databases{
+					Service: config.Service{EnabledFlag: "true"},
 					Databases: []*config.Database{
 						{
-							Name: "memorydb-1",
-							URI:  "clustercfg.memorydb1.xxxxxx.us-east-1.memorydb.amazonaws.com:6379",
+							Name:     "memorydb-1",
+							Protocol: "redis",
+							URI:      "clustercfg.my-memorydb-1.xxxxxx.memorydb.us-east-1.amazonaws.com:6379",
 						},
 						{
-							Name: "memorydb-2",
-							URI:  "clustercfg.memorydb0.xxxxxx.us-east-1.memorydb.amazonaws.com:6379",
+							Name:     "memorydb-2",
+							Protocol: "redis",
+							URI:      "clustercfg.my-memorydb-2.xxxxxx.memorydb.us-east-1.amazonaws.com:6379",
 							AWS: config.DatabaseAWS{
 								SecretStore: config.SecretStore{
 									KeyPrefix: "my-prefix/",
@@ -507,6 +530,7 @@ func TestAWSIAMDocuments(t *testing.T) {
 			flags:  configurators.BootstrapFlags{DiscoveryService: true},
 			fileConfig: &config.FileConfig{
 				Discovery: config.Discovery{
+					Service: config.Service{EnabledFlag: "true"},
 					AWSMatchers: []config.AWSMatcher{
 						{
 							Types:   []string{services.AWSMatcherEC2},
@@ -515,14 +539,13 @@ func TestAWSIAMDocuments(t *testing.T) {
 							InstallParams: &config.InstallParams{
 								JoinParams: config.JoinParams{
 									TokenName: "token",
-									Method:    types.JoinMethodEC2,
+									Method:    types.JoinMethodIAM,
 								},
 							},
 						},
 					},
 				},
 			},
-
 			statements: []*awslib.Statement{
 				{
 					Effect: "Allow",
@@ -549,6 +572,7 @@ func TestAWSIAMDocuments(t *testing.T) {
 			target:      unknownIdentity,
 			fileConfig: &config.FileConfig{
 				Databases: config.Databases{
+					Service: config.Service{EnabledFlag: "true"},
 					AWSMatchers: []config.AWSMatcher{
 						{Types: []string{services.AWSMatcherRDS}, Regions: []string{"us-west-2"}},
 					},
@@ -559,6 +583,7 @@ func TestAWSIAMDocuments(t *testing.T) {
 			target: userTarget,
 			fileConfig: &config.FileConfig{
 				Databases: config.Databases{
+					Service: config.Service{EnabledFlag: "true"},
 					AWSMatchers: []config.AWSMatcher{
 						{Types: []string{services.AWSMatcherRDSProxy}, Regions: []string{"us-west-2"}},
 					},
@@ -586,6 +611,7 @@ func TestAWSIAMDocuments(t *testing.T) {
 			target: userTarget,
 			fileConfig: &config.FileConfig{
 				Databases: config.Databases{
+					Service: config.Service{EnabledFlag: "true"},
 					Databases: []*config.Database{
 						{
 							Name:     "rds-proxy-1",
@@ -617,6 +643,7 @@ func TestAWSIAMDocuments(t *testing.T) {
 			target: roleTarget,
 			fileConfig: &config.FileConfig{
 				Databases: config.Databases{
+					Service: config.Service{EnabledFlag: "true"},
 					AWSMatchers: []config.AWSMatcher{
 						{Types: []string{services.AWSMatcherRedshiftServerless}, Regions: []string{"us-west-2"}},
 					},
@@ -641,6 +668,7 @@ func TestAWSIAMDocuments(t *testing.T) {
 			target: roleTarget,
 			fileConfig: &config.FileConfig{
 				Databases: config.Databases{
+					Service: config.Service{EnabledFlag: "true"},
 					Databases: []*config.Database{
 						{
 							Name:     "redshift-serverless-1",
@@ -669,11 +697,13 @@ func TestAWSIAMDocuments(t *testing.T) {
 			target: roleTarget,
 			fileConfig: &config.FileConfig{
 				Databases: config.Databases{
+					Service: config.Service{EnabledFlag: "true"},
 					Databases: []*config.Database{{
 						Name:     "keyspaces-1",
 						Protocol: "cassandra",
 						AWS: config.DatabaseAWS{
 							AccountID: "123456789012",
+							Region:    "us-west-1",
 						},
 					}},
 				},
@@ -690,11 +720,13 @@ func TestAWSIAMDocuments(t *testing.T) {
 			target: roleTarget,
 			fileConfig: &config.FileConfig{
 				Databases: config.Databases{
+					Service: config.Service{EnabledFlag: "true"},
 					Databases: []*config.Database{{
 						Name:     "dynamodb-1",
 						Protocol: "dynamodb",
 						AWS: config.DatabaseAWS{
-							Region: "us-west-1",
+							Region:    "us-west-1",
+							AccountID: "123456789012",
 						},
 					}},
 				},
@@ -707,12 +739,76 @@ func TestAWSIAMDocuments(t *testing.T) {
 				},
 			},
 		},
+		"target not in assume role": {
+			target: roleTarget,
+			flags:  configurators.BootstrapFlags{ForceExternalAssumeRoles: []string{externalAssumeRole1}},
+			fileConfig: &config.FileConfig{
+				Databases: config.Databases{
+					Service: config.Service{EnabledFlag: "true"},
+					Databases: []*config.Database{
+						{
+							Name:     "aurora-2",
+							Protocol: "postgres",
+							URI:      "aurora-instance-2.abcdefghijklmnop.us-west-1.rds.amazonaws.com:5432",
+							AWS: config.DatabaseAWS{
+								AssumeRoleARN: internalAssumeRole2,
+							},
+						},
+						{
+							Name:     "aurora-1",
+							Protocol: "postgres",
+							URI:      "aurora-instance-1.abcdefghijklmnop.us-west-1.rds.amazonaws.com:5432",
+							AWS: config.DatabaseAWS{
+								AssumeRoleARN: externalAssumeRole2,
+								ExternalID:    "someID",
+							},
+						},
+					},
+					AWSMatchers: []config.AWSMatcher{
+						{Types: []string{services.AWSMatcherRDS}, Regions: []string{"us-west-2"}, AssumeRoleARN: internalAssumeRole3},
+						{Types: []string{services.AWSMatcherRDS}, Regions: []string{"us-west-2"}, AssumeRoleARN: externalAssumeRole3, ExternalID: "foo"},
+					},
+				},
+			},
+			statements: []*awslib.Statement{
+				{
+					Effect: awslib.EffectAllow,
+					// only need iam policy to give explicit permission for external assume roles.
+					Resources: awslib.SliceOrString{externalAssumeRole1, externalAssumeRole2, externalAssumeRole3},
+					Actions:   awslib.SliceOrString{"sts:AssumeRole"},
+				},
+			},
+			boundaryStatements: []*awslib.Statement{{
+				Effect:    awslib.EffectAllow,
+				Resources: []string{"*"},
+				Actions: []string{
+					"sts:AssumeRole",
+				}},
+			},
+		},
+		"force assume role boundary": {
+			target:     roleTarget,
+			fileConfig: &config.FileConfig{},
+			flags:      configurators.BootstrapFlags{ForceBoundaryAssumeRoles: true},
+			boundaryStatements: []*awslib.Statement{{
+				Effect:    awslib.EffectAllow,
+				Resources: []string{"*"},
+				Actions: []string{
+					"sts:AssumeRole",
+				}},
+			},
+		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			policy, policyErr := buildPolicyDocument(test.flags, test.fileConfig, test.target, false)
-			boundary, boundaryErr := buildPolicyDocument(test.flags, test.fileConfig, test.target, true)
+			require.NoError(t, test.fileConfig.CheckAndSetDefaults())
+			serviceCfg := servicecfg.MakeDefaultConfig()
+			require.NoError(t, config.ApplyFileConfig(test.fileConfig, serviceCfg))
+			targetCfg, err := getTargetConfig(test.flags, serviceCfg, test.target)
+			require.NoError(t, err)
+			policy, policyErr := buildPolicyDocument(test.flags, targetCfg, false)
+			boundary, boundaryErr := buildPolicyDocument(test.flags, targetCfg, true)
 
 			if test.returnError {
 				require.Error(t, policyErr)
@@ -729,12 +825,15 @@ func TestAWSIAMDocuments(t *testing.T) {
 
 	t.Run("discovery service", func(t *testing.T) {
 		tests := map[string]struct {
-			fileConfig *config.FileConfig
-			statements []*awslib.Statement
+			fileConfig           *config.FileConfig
+			statements           []*awslib.Statement
+			boundaryStatements   []*awslib.Statement
+			wantInlineAsBoundary bool
 		}{
 			"RDS": {
 				fileConfig: &config.FileConfig{
 					Discovery: config.Discovery{
+						Service: config.Service{EnabledFlag: "true"},
 						AWSMatchers: []config.AWSMatcher{
 							{Types: []string{services.AWSMatcherRDS}, Regions: []string{"us-west-2"}},
 						},
@@ -747,10 +846,12 @@ func TestAWSIAMDocuments(t *testing.T) {
 						Actions:   awslib.SliceOrString{"rds:DescribeDBInstances", "rds:DescribeDBClusters"},
 					},
 				},
+				wantInlineAsBoundary: true,
 			},
 			"RDS Proxy": {
 				fileConfig: &config.FileConfig{
 					Discovery: config.Discovery{
+						Service: config.Service{EnabledFlag: "true"},
 						AWSMatchers: []config.AWSMatcher{
 							{Types: []string{services.AWSMatcherRDSProxy}, Regions: []string{"us-west-2"}},
 						},
@@ -763,10 +864,12 @@ func TestAWSIAMDocuments(t *testing.T) {
 						Actions:   awslib.SliceOrString{"rds:DescribeDBProxies", "rds:DescribeDBProxyEndpoints", "rds:DescribeDBProxyTargets", "rds:ListTagsForResource"},
 					},
 				},
+				wantInlineAsBoundary: true,
 			},
 			"Redshift": {
 				fileConfig: &config.FileConfig{
 					Discovery: config.Discovery{
+						Service: config.Service{EnabledFlag: "true"},
 						AWSMatchers: []config.AWSMatcher{
 							{Types: []string{services.AWSMatcherRedshift}, Regions: []string{"us-west-2"}},
 						},
@@ -779,10 +882,12 @@ func TestAWSIAMDocuments(t *testing.T) {
 						Actions:   awslib.SliceOrString{"redshift:DescribeClusters"},
 					},
 				},
+				wantInlineAsBoundary: true,
 			},
 			"Redshift Serverless": {
 				fileConfig: &config.FileConfig{
 					Discovery: config.Discovery{
+						Service: config.Service{EnabledFlag: "true"},
 						AWSMatchers: []config.AWSMatcher{
 							{Types: []string{services.AWSMatcherRedshiftServerless}, Regions: []string{"us-west-2"}},
 						},
@@ -795,10 +900,12 @@ func TestAWSIAMDocuments(t *testing.T) {
 						Actions:   awslib.SliceOrString{"redshift-serverless:ListWorkgroups", "redshift-serverless:ListEndpointAccess", "redshift-serverless:ListTagsForResource"},
 					},
 				},
+				wantInlineAsBoundary: true,
 			},
 			"ElastiCache": {
 				fileConfig: &config.FileConfig{
 					Discovery: config.Discovery{
+						Service: config.Service{EnabledFlag: "true"},
 						AWSMatchers: []config.AWSMatcher{
 							{Types: []string{services.AWSMatcherElastiCache}, Regions: []string{"us-west-2"}},
 						},
@@ -811,10 +918,12 @@ func TestAWSIAMDocuments(t *testing.T) {
 						Actions:   awslib.SliceOrString{"elasticache:ListTagsForResource", "elasticache:DescribeReplicationGroups", "elasticache:DescribeCacheClusters", "elasticache:DescribeCacheSubnetGroups"},
 					},
 				},
+				wantInlineAsBoundary: true,
 			},
 			"MemoryDB": {
 				fileConfig: &config.FileConfig{
 					Discovery: config.Discovery{
+						Service: config.Service{EnabledFlag: "true"},
 						AWSMatchers: []config.AWSMatcher{
 							{Types: []string{services.AWSMatcherMemoryDB}, Regions: []string{"us-west-2"}},
 						},
@@ -827,13 +936,16 @@ func TestAWSIAMDocuments(t *testing.T) {
 						Actions:   awslib.SliceOrString{"memorydb:ListTags", "memorydb:DescribeClusters", "memorydb:DescribeSubnetGroups"},
 					},
 				},
+				wantInlineAsBoundary: true,
 			},
 			"multiple": {
 				fileConfig: &config.FileConfig{
 					Discovery: config.Discovery{
+						Service: config.Service{EnabledFlag: "true"},
 						AWSMatchers: []config.AWSMatcher{
 							{Types: []string{services.AWSMatcherRedshift}, Regions: []string{"us-west-1"}},
 							{Types: []string{services.AWSMatcherRedshift, services.AWSMatcherRDS, services.AWSMatcherRDSProxy}, Regions: []string{"us-west-2"}},
+							{Types: []string{services.AWSMatcherElastiCache}, Regions: []string{"us-west-2"}, AssumeRoleARN: externalAssumeRole1, ExternalID: "foo"},
 						},
 					},
 				},
@@ -853,22 +965,65 @@ func TestAWSIAMDocuments(t *testing.T) {
 						Resources: awslib.SliceOrString{"*"},
 						Actions:   awslib.SliceOrString{"redshift:DescribeClusters"},
 					},
+					{
+						Effect:    awslib.EffectAllow,
+						Resources: awslib.SliceOrString{externalAssumeRole1},
+						Actions:   awslib.SliceOrString{"sts:AssumeRole"},
+					},
 				},
+				boundaryStatements: []*awslib.Statement{
+					{
+						Effect:    awslib.EffectAllow,
+						Resources: awslib.SliceOrString{"*"},
+						Actions:   awslib.SliceOrString{"rds:DescribeDBInstances", "rds:DescribeDBClusters"},
+					},
+					{
+						Effect:    awslib.EffectAllow,
+						Resources: awslib.SliceOrString{"*"},
+						Actions:   awslib.SliceOrString{"rds:DescribeDBProxies", "rds:DescribeDBProxyEndpoints", "rds:DescribeDBProxyTargets", "rds:ListTagsForResource"},
+					},
+					{
+						Effect:    awslib.EffectAllow,
+						Resources: awslib.SliceOrString{"*"},
+						Actions:   awslib.SliceOrString{"redshift:DescribeClusters"},
+					},
+					{
+						Effect:    awslib.EffectAllow,
+						Resources: awslib.SliceOrString{"*"},
+						Actions:   awslib.SliceOrString{"sts:AssumeRole"},
+					},
+				},
+				wantInlineAsBoundary: false,
 			},
 		}
 
-		// For discovery service, currently the same statements are generated
-		// for both the inline policy and the boundary policy.
-		for name, test := range tests {
+		testnames := []string{}
+		for name := range tests {
+			testnames = append(testnames, name)
+		}
+		slices.Sort(testnames)
+		flags := configurators.BootstrapFlags{DiscoveryService: true}
+		for _, name := range testnames {
+			test := tests[name]
+			// for name, test := range tests {
 			t.Run(name, func(t *testing.T) {
-				for _, boundary := range []bool{true, false} {
-					t.Run(fmt.Sprintf("boundary %v", boundary), func(t *testing.T) {
-						policy, policyErr := buildPolicyDocument(configurators.BootstrapFlags{DiscoveryService: true}, test.fileConfig, roleTarget, boundary)
-						require.NoError(t, policyErr)
-						require.Empty(t, cmp.Diff(test.statements, policy.Document.Statements, sortStringsTrans))
-					})
-				}
+				require.NoError(t, test.fileConfig.CheckAndSetDefaults())
+				serviceCfg := servicecfg.MakeDefaultConfig()
+				require.NoError(t, config.ApplyFileConfig(test.fileConfig, serviceCfg))
+				targetCfg, err := getTargetConfig(flags, serviceCfg, roleTarget)
+				require.NoError(t, err)
 
+				policy, policyErr := buildPolicyDocument(flags, targetCfg, false)
+				boundary, boundaryErr := buildPolicyDocument(flags, targetCfg, true)
+
+				require.NoError(t, policyErr)
+				require.NoError(t, boundaryErr)
+				require.Empty(t, cmp.Diff(test.statements, policy.Document.Statements, sortStringsTrans))
+				if test.wantInlineAsBoundary {
+					require.Empty(t, cmp.Diff(test.statements, boundary.Document.Statements, sortStringsTrans))
+				} else {
+					require.Empty(t, cmp.Diff(test.boundaryStatements, boundary.Document.Statements, sortStringsTrans))
+				}
 			})
 		}
 	})
@@ -1111,6 +1266,23 @@ func TestAWSPoliciesTarget(t *testing.T) {
 func TestAWSDocumentConfigurator(t *testing.T) {
 	var err error
 	ctx := context.Background()
+	fileConfig := &config.FileConfig{
+		Proxy: config.Proxy{
+			PublicAddr: []string{"proxy.example.org:443"},
+		},
+		Discovery: config.Discovery{
+			AWSMatchers: []config.AWSMatcher{
+				{
+					Types:   []string{"ec2"},
+					Regions: []string{"eu-central-1"},
+					SSM:     config.AWSSSM{DocumentName: "document"},
+				},
+			},
+		},
+	}
+	require.NoError(t, fileConfig.CheckAndSetDefaults())
+	serviceConfig := servicecfg.MakeDefaultConfig()
+	require.NoError(t, config.ApplyFileConfig(fileConfig, serviceConfig))
 
 	config := ConfiguratorConfig{
 		AWSSession:   &awssession.Session{},
@@ -1124,20 +1296,7 @@ func TestAWSDocumentConfigurator(t *testing.T) {
 				Name:           aws.String("document"),
 			},
 		},
-		FileConfig: &config.FileConfig{
-			Proxy: config.Proxy{
-				PublicAddr: []string{"proxy.example.org:443"},
-			},
-			Discovery: config.Discovery{
-				AWSMatchers: []config.AWSMatcher{
-					{
-						Types:   []string{"ec2"},
-						Regions: []string{"eu-central-1"},
-						SSM:     config.AWSSSM{DocumentName: "document"},
-					},
-				},
-			},
-		},
+		ServiceConfig: serviceConfig,
 		Flags: configurators.BootstrapFlags{
 			DiscoveryService:    true,
 			ForceEC2Permissions: true,
@@ -1165,10 +1324,10 @@ func TestAWSConfigurator(t *testing.T) {
 	ctx := context.Background()
 
 	config := ConfiguratorConfig{
-		AWSSession:   &awssession.Session{},
-		AWSSTSClient: &STSMock{ARN: "arn:aws:iam::1234567:role/example-role"},
-		AWSSSMClient: &SSMMock{},
-		FileConfig:   &config.FileConfig{},
+		AWSSession:    &awssession.Session{},
+		AWSSTSClient:  &STSMock{ARN: "arn:aws:iam::1234567:role/example-role"},
+		AWSSSMClient:  &SSMMock{},
+		ServiceConfig: &servicecfg.Config{},
 		Flags: configurators.BootstrapFlags{
 			AttachToUser:        "some-user",
 			ForceRDSPermissions: true,
@@ -1203,6 +1362,251 @@ func TestAWSConfigurator(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+}
+
+func TestExtractTargetConfig(t *testing.T) {
+	t.Parallel()
+	internalRole1 := "arn:aws:iam::123456789012:role/internal-role-1"
+	internalRole2 := "arn:aws:iam::123456789012:role/internal-role-2"
+	internalRole3 := "arn:aws:iam::123456789012:role/internal-role-3"
+	internalRole4 := "arn:aws:iam::123456789012:role/internal-role-4"
+	internalRole5 := "arn:aws:iam::123456789012:role/internal-role-5"
+	externalRole1 := "arn:aws:iam::222222222222:role/external-role-1"
+	externalRole2 := "arn:aws:iam::222222222222:role/external-role-2"
+	externalRole3 := "arn:aws:iam::222222222222:role/external-role-3"
+	roleTarget1, err := awslib.IdentityFromArn(internalRole1)
+	require.NoError(t, err)
+
+	tests := map[string]struct {
+		target awslib.Identity
+		flags  configurators.BootstrapFlags
+		cfg    *servicecfg.Config
+		want   targetConfig
+	}{
+		"target in assume roles": {
+			target: roleTarget1,
+			flags:  configurators.BootstrapFlags{ForceExternalAssumeRoles: []string{externalRole1}},
+			cfg: &servicecfg.Config{
+				// check discovery resources are not included
+				Discovery: servicecfg.DiscoveryConfig{
+					AWSMatchers: []services.AWSMatcher{
+						{Types: []string{services.AWSMatcherRDSProxy}, AssumeRole: services.AssumeRole{RoleARN: internalRole1}},
+					},
+				},
+				Databases: servicecfg.DatabasesConfig{
+					Databases: []servicecfg.Database{
+						{Name: "db1", AWS: servicecfg.DatabaseAWS{AssumeRoleARN: internalRole3}},
+						{Name: "db2", AWS: servicecfg.DatabaseAWS{AssumeRoleARN: externalRole2, ExternalID: "foo"}},
+						{Name: "db3"},
+						{Name: "db4", AWS: servicecfg.DatabaseAWS{AssumeRoleARN: internalRole1}},
+					},
+					AWSMatchers: []services.AWSMatcher{
+						{Types: []string{services.AWSMatcherRDS, services.AWSMatcherEC2}, AssumeRole: services.AssumeRole{RoleARN: internalRole4}},
+						{Types: []string{services.AWSMatcherRDS, services.AWSMatcherEC2}, AssumeRole: services.AssumeRole{RoleARN: externalRole3, ExternalID: "foo"}},
+						{Types: []string{services.AWSMatcherEC2}, AssumeRole: services.AssumeRole{RoleARN: internalRole5}},
+						{Types: []string{services.AWSMatcherElastiCache}},
+						{Types: []string{services.AWSMatcherRedshift}, AssumeRole: services.AssumeRole{RoleARN: internalRole1}},
+					},
+				},
+			},
+			want: targetConfig{
+				identity: roleTarget1,
+				assumeAWSRoles: awsAssumeRoleARNs{
+					internal: []string{},
+					external: []string{},
+				},
+				databases: []*servicecfg.Database{{Name: "db4", AWS: servicecfg.DatabaseAWS{AssumeRoleARN: internalRole1}}},
+				awsMatchers: []services.AWSMatcher{
+					{Types: []string{services.AWSMatcherRedshift}, AssumeRole: services.AssumeRole{RoleARN: internalRole1}},
+				},
+			},
+		},
+		"target in discovery assume roles": {
+			target: roleTarget1,
+			flags:  configurators.BootstrapFlags{ForceExternalAssumeRoles: []string{externalRole1}, DiscoveryService: true},
+			cfg: &servicecfg.Config{
+				Discovery: servicecfg.DiscoveryConfig{
+					AWSMatchers: []services.AWSMatcher{
+						{Types: []string{services.AWSMatcherRDSProxy}, AssumeRole: services.AssumeRole{RoleARN: internalRole1}},
+					},
+				},
+				// check that database service resources are not included.
+				Databases: servicecfg.DatabasesConfig{
+					Databases: []servicecfg.Database{
+						{Name: "db1", AWS: servicecfg.DatabaseAWS{AssumeRoleARN: internalRole1}},
+					},
+					AWSMatchers: []services.AWSMatcher{
+						{Types: []string{services.AWSMatcherRedshift}, AssumeRole: services.AssumeRole{RoleARN: internalRole1}},
+					},
+				},
+			},
+			want: targetConfig{
+				identity: roleTarget1,
+				assumeAWSRoles: awsAssumeRoleARNs{
+					internal: []string{},
+					external: []string{},
+				},
+				awsMatchers: []services.AWSMatcher{
+					{Types: []string{services.AWSMatcherRDSProxy}, AssumeRole: services.AssumeRole{RoleARN: internalRole1}},
+				},
+			},
+		},
+		"target not in assume roles": {
+			target: roleTarget1,
+			flags:  configurators.BootstrapFlags{ForceExternalAssumeRoles: []string{externalRole1}},
+			cfg: &servicecfg.Config{
+				// check that discovery service resources are not included.
+				Discovery: servicecfg.DiscoveryConfig{
+					AWSMatchers: []services.AWSMatcher{
+						{Types: []string{services.AWSMatcherEC2}},
+					},
+				},
+				Databases: servicecfg.DatabasesConfig{
+					Databases: []servicecfg.Database{
+						{Name: "db1", AWS: servicecfg.DatabaseAWS{AssumeRoleARN: internalRole2}},
+						{Name: "db2", AWS: servicecfg.DatabaseAWS{AssumeRoleARN: externalRole2, ExternalID: "foo"}},
+						{Name: "db3"},
+					},
+					AWSMatchers: []services.AWSMatcher{
+						// rds/ec2 matcher's assume role should be added because rds assume role is supported.
+						{Types: []string{services.AWSMatcherRDS, services.AWSMatcherEC2}, AssumeRole: services.AssumeRole{RoleARN: internalRole3}},
+						// ec2-only matcher's assume role should not be added because it's not supported.
+						{Types: []string{services.AWSMatcherEC2}, AssumeRole: services.AssumeRole{RoleARN: internalRole4}},
+						{Types: []string{services.AWSMatcherRDS, services.AWSMatcherEC2}, AssumeRole: services.AssumeRole{RoleARN: externalRole3, ExternalID: "foo"}},
+						// matcher without assume role should be added to matchers
+						{Types: []string{services.AWSMatcherElastiCache}},
+					},
+				},
+			},
+			want: targetConfig{
+				identity: roleTarget1,
+				assumeAWSRoles: awsAssumeRoleARNs{
+					internal: []string{internalRole2, internalRole3},
+					external: []string{externalRole1, externalRole2, externalRole3},
+				},
+				databases: []*servicecfg.Database{{Name: "db3"}},
+				awsMatchers: []services.AWSMatcher{
+					{Types: []string{services.AWSMatcherElastiCache}},
+				},
+			},
+		},
+		"target not in discovery roles": {
+			target: roleTarget1,
+			flags:  configurators.BootstrapFlags{ForceExternalAssumeRoles: []string{externalRole1}, DiscoveryService: true},
+			cfg: &servicecfg.Config{
+				Discovery: servicecfg.DiscoveryConfig{
+					AWSMatchers: []services.AWSMatcher{
+						{Types: []string{services.AWSMatcherRDSProxy}, AssumeRole: services.AssumeRole{RoleARN: internalRole2}},
+						{Types: []string{services.AWSMatcherRDSProxy}, AssumeRole: services.AssumeRole{RoleARN: externalRole2, ExternalID: "foo"}},
+						{Types: []string{services.AWSMatcherEC2}},
+					},
+				},
+				// check that database service resources are not included.
+				Databases: servicecfg.DatabasesConfig{
+					Databases: []servicecfg.Database{
+						{Name: "db3"},
+					},
+					AWSMatchers: []services.AWSMatcher{
+						{Types: []string{services.AWSMatcherElastiCache}},
+					},
+				},
+			},
+			want: targetConfig{
+				identity: roleTarget1,
+				assumeAWSRoles: awsAssumeRoleARNs{
+					internal: []string{internalRole2},
+					external: []string{externalRole1, externalRole2},
+				},
+				awsMatchers: []services.AWSMatcher{
+					{Types: []string{services.AWSMatcherEC2}},
+				},
+			},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := getTargetConfig(tt.flags, tt.cfg, tt.target)
+			require.NoError(t, err)
+			require.Equal(t, tt.target, got.identity)
+			// for test convenience, use cmp.Diff to equate []Type(nil) and []Type{}.
+			diff := cmp.Diff(tt.want, got,
+				cmpopts.EquateEmpty(),
+				cmp.AllowUnexported(targetConfig{}, awsAssumeRoleARNs{}),
+				// since diff is allowing unexported types and identity can
+				// contain the external type arn.ARN, ignore it in the diff.
+				// check it separately with require.Equal above.
+				cmpopts.IgnoreFields(targetConfig{}, "identity"))
+			require.Empty(t, diff)
+		})
+	}
+}
+
+func TestIsTargetAssumeRole(t *testing.T) {
+	t.Parallel()
+	userTarget, err := awslib.IdentityFromArn("arn:aws:iam::123456789012:user/example-user")
+	require.NoError(t, err)
+	role1 := "arn:aws:iam::123456789012:role/test-role-1"
+	role2 := "arn:aws:iam::123456789012:role/test-role-2"
+	roleTarget1, err := awslib.IdentityFromArn(role1)
+	require.NoError(t, err)
+
+	// --assume-role x matchers x databases x target
+	tests := map[string]struct {
+		target    awslib.Identity
+		flags     configurators.BootstrapFlags
+		matchers  []services.AWSMatcher
+		databases []*servicecfg.Database
+		want      bool
+	}{
+		"target in external assume role flag": {
+			target: roleTarget1,
+			flags:  configurators.BootstrapFlags{ForceExternalAssumeRoles: []string{role1}},
+			want:   true,
+		},
+		"target in matchers": {
+			target: roleTarget1,
+			matchers: []services.AWSMatcher{{
+				Types:      []string{services.AWSMatcherRDS},
+				Regions:    []string{"us-west-1"},
+				AssumeRole: services.AssumeRole{RoleARN: role1},
+			}},
+			want: true,
+		},
+		"target in databases": {
+			target: roleTarget1,
+			databases: []*servicecfg.Database{{
+				AWS: servicecfg.DatabaseAWS{
+					AssumeRoleARN: role1,
+				},
+			}},
+			want: true,
+		},
+		"target is not a role": {
+			target: userTarget,
+			want:   false,
+		},
+		"target not in anything": {
+			target: roleTarget1,
+			flags:  configurators.BootstrapFlags{ForceExternalAssumeRoles: []string{role2}},
+			matchers: []services.AWSMatcher{{
+				Types:      []string{services.AWSMatcherRDS},
+				Regions:    []string{"us-west-1"},
+				AssumeRole: services.AssumeRole{RoleARN: role2},
+			}},
+			databases: []*servicecfg.Database{{
+				AWS: servicecfg.DatabaseAWS{
+					AssumeRoleARN: role2,
+				},
+			}},
+			want: false,
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := isTargetAWSAssumeRole(tt.flags, tt.matchers, tt.databases, tt.target)
+			require.Equal(t, tt.want, got)
+		})
+	}
 }
 
 type policiesMock struct {
