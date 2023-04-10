@@ -1351,6 +1351,10 @@
           "slug": "/architecture/authorization/"
         },
         {
+          "title": "Automatic Agent Update",
+          "slug": "/architecture/automatic-agent-update/"
+        },
+        {
           "title": "Teleport Proxy",
           "slug": "/architecture/proxy/"
         },
