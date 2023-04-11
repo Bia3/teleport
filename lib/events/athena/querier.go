@@ -449,6 +449,9 @@ type keyset struct {
 	uid uuid.UUID
 }
 
+// keySetLen defines len of keyset. 8 bytes from timestamp + 16 for UUID.
+const keySetLen = 24
+
 // FromKey attempts to parse a keyset from a string. The string is a URL-safe
 // base64 encoding of the time in microseconds as an int64, the event UUID;
 // numbers are encoded in little-endian.
@@ -461,7 +464,7 @@ func fromKey(key string) (*keyset, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	if len(b) != 24 {
+	if len(b) != keySetLen {
 		return nil, trace.BadParameter("malformed pagination key")
 	}
 	ks := &keyset{}
@@ -475,7 +478,7 @@ func fromKey(key string) (*keyset, error) {
 
 // ToKey converts the keyset into a URL-safe string.
 func (ks *keyset) ToKey() string {
-	var b [24]byte
+	var b [keySetLen]byte
 	binary.LittleEndian.PutUint64(b[0:8], uint64(ks.t.UnixMicro()))
 	copy(b[8:24], ks.uid[:])
 	return base64.URLEncoding.EncodeToString(b[:])
