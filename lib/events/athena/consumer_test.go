@@ -67,7 +67,7 @@ func Test_consumer_sqsMessagesCollector(t *testing.T) {
 	maxWaitTimeOnReceiveMessagesInFake := 5 * time.Millisecond
 	maxWaitOnResults := 50 * time.Millisecond
 
-	t.Run("scenario 1", func(t *testing.T) {
+	t.Run("verify if events are sent over channel", func(t *testing.T) {
 		// Given SqsMessagesCollector reading from fake sqs with random wait time on receiveMessage call
 		// When 3 messages are published
 		// Then 3 messages can be received from eventsChan.
@@ -108,7 +108,7 @@ func Test_consumer_sqsMessagesCollector(t *testing.T) {
 		}, maxWaitOnResults, 1*time.Millisecond)
 	})
 
-	t.Run("scenario 2", func(t *testing.T) {
+	t.Run("verify if collector finishes execution (via closing channel) upon ctx.Cancel", func(t *testing.T) {
 		// Given SqsMessagesCollector reading from fake sqs with random wait time on receiveMessage call
 		// When ctx is canceled
 		// Then reading chan is closed.
@@ -136,7 +136,7 @@ func Test_consumer_sqsMessagesCollector(t *testing.T) {
 		require.Eventually(t, channelClosedCondition(t, eventsChan), maxWaitOnResults, 1*time.Millisecond)
 	})
 
-	t.Run("scenario 3", func(t *testing.T) {
+	t.Run("verify if collector finishes execution (via closing channel) upon reaching batchMaxItems", func(t *testing.T) {
 		// Given SqsMessagesCollector reading from fake sqs with random wait time on receiveMessage call
 		// When batchMaxItems is reached.
 		// Then reading chan is closed.
