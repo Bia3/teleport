@@ -16,14 +16,17 @@ deployment.
 
 ## Overview
 
-A high-availability Teleport cluster revolves around a group of redundant
-`teleport` processes, each of which runs the Auth Service and Proxy Service,
-plus the infrastructure required to support them. 
+A high-availability Teleport cluster revolves around two pools of redundant
+`teleport` processes, one running the Auth Service and one running the Proxy
+Service, plus the infrastructure required to support each pool. 
 
-This includes:
-
-- **A Layer 4 load balancer** to direct traffic from users and services to an
-  available `teleport` process.
+Infrastructure components include:
+- A **public Layer 4 load balancer** to direct traffic from users and services
+  to an available `teleport` process.
+- ** **private Layer 4 load balancer** to direct traffic from the Proxy Service
+  to the Auth Service's gRPC API, which is how Teleport manages the Auth
+  Service's backend state and provides credentials to users and services in your
+  cluster.
 - A **cluster state backend**. This is a key-value store for cluster state and
   audit events that all Auth Service instances can access. This requires
   permissions for Auth Service instances to manage records within the key-value
@@ -44,16 +47,26 @@ This includes:
 ![Diagram of a high-availability Teleport
 architecture](../../img/deploy-a-cluster/teleport-ha-architecture.png)
 
-## Layer 4 load balancer
+## Layer 4 load balancers
 
-The load balancer forwards traffic from users and services to an available
-Teleport instance. This must not terminate TLS, and must transparently forward
-the TCP traffic it receives. In other words, this must be a Layer 4 load
-balancer, not a Layer 7 (e.g., HTTP) load balancer. 
+High-availability Teleport clusters require two load balancers:
+- A load balancer to receive traffic from outside the network where your
+  Teleport cluster is running and forward it to an available Proxy Service
+  instance. This load balancer handles TCP traffic from users and services in a
+  variety of application-layer protocols.
+- A load balancer to forward traffic from a Proxy Service instance to an
+  available Auth Service instance. This handles TLS traffic to the Auth
+  Service's gRPC endpoint.
 
-We recommend configuring your load balancer to route traffic across multiple
+Neither load balancer must terminate TLS. Both load balancers must transparently
+forward the TCP traffic they receive. In other words, these must be Layer 4 load
+balances, not Layer 7 (e.g., HTTP) load balancers.
+
+We recommend configuring your load balancers to route traffic across multiple
 zones (if using a cloud provider) or data centers (if using an on-premise
 solution) to ensure availability. 
+
+{/* TODO: Update the TLS Routing section*/}
 
 ### TLS Routing
 
