@@ -187,7 +187,7 @@ func (c *consumer) singleBatch(ctx context.Context) error {
 // sqsMessagesCollector is responsible for collecting messages from SQS and
 // writing to on channel.
 type sqsMessagesCollector struct {
-	logger        *log.Entry
+	logger        log.FieldLogger
 	config        sqsCollectConfig
 	errHandlingFn func(ctx context.Context, errC chan error)
 	eventsChan    chan eventAndAckID
@@ -195,7 +195,7 @@ type sqsMessagesCollector struct {
 
 // newSqsMessagesCollector returns message collector.
 // Collector sends collected messages from SQS on events channel.
-func newSqsMessagesCollector(cfg sqsCollectConfig, log *log.Entry, errHandlingFn func(ctx context.Context, errC chan error)) *sqsMessagesCollector {
+func newSqsMessagesCollector(cfg sqsCollectConfig, log log.FieldLogger, errHandlingFn func(ctx context.Context, errC chan error)) *sqsMessagesCollector {
 	return &sqsMessagesCollector{
 		logger:        log,
 		config:        cfg,

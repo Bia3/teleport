@@ -28,11 +28,11 @@ import (
 	sqsTypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	apievents "github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/lib/events"
+	"github.com/gravitational/teleport/lib/utils"
 )
 
 func Test_consumer_sqsMessagesCollector(t *testing.T) {
@@ -62,7 +62,7 @@ func Test_consumer_sqsMessagesCollector(t *testing.T) {
 			}
 		}
 	}
-	log := logrus.NewEntry(logrus.New())
+	log := utils.NewLoggerForTests()
 
 	maxWaitTimeOnReceiveMessagesInFake := 5 * time.Millisecond
 	maxWaitOnResults := 50 * time.Millisecond
