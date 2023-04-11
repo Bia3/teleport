@@ -526,25 +526,61 @@ func TestDownload(t *testing.T) {
 }
 
 func TestHomeDirExpansion(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		path         string
 		expandedPath string
+		isRemotePath bool
 	}{
 		{
-			name:         "absolute path",
+			name:         "local absolute path",
 			path:         "/foo/bar",
 			expandedPath: "/foo/bar",
+			isRemotePath: false,
 		},
 		{
-			name:         "path with tilde",
+			name:         "local path with tilde-slash",
 			path:         "~/foo/bar",
 			expandedPath: "/home/user/foo/bar",
+			isRemotePath: false,
 		},
 		{
-			name:         "just tilde",
+			name:         "local path with tilde",
+			path:         "~foo/bar",
+			expandedPath: "/home/user/foo/bar",
+			isRemotePath: false,
+		},
+		{
+			name:         "local just tilde",
 			path:         "~",
 			expandedPath: "/home/user",
+			isRemotePath: false,
+		},
+		{
+			name:         "remote absolute path",
+			path:         "/foo/bar",
+			expandedPath: "/foo/bar",
+			isRemotePath: true,
+		},
+		{
+			name:         "remote path with tilde-slash",
+			path:         "~/foo/bar",
+			expandedPath: "foo/bar",
+			isRemotePath: true,
+		},
+		{
+			name:         "remote path with tilde",
+			path:         "~foo/bar",
+			expandedPath: "foo/bar",
+			isRemotePath: true,
+		},
+		{
+			name:         "remote just tilde",
+			path:         "~",
+			expandedPath: ".",
+			isRemotePath: true,
 		},
 	}
 
@@ -554,7 +590,7 @@ func TestHomeDirExpansion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			expanded, err := expandPath(tt.path, getHomeDirFunc)
+			expanded, err := expandPath(tt.path, tt.isRemotePath, getHomeDirFunc)
 			require.NoError(t, err)
 			require.Equal(t, tt.expandedPath, expanded)
 		})

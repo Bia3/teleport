@@ -18,7 +18,6 @@ limitations under the License.
 package sftp
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -37,7 +36,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 
-	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/sshutils/scp"
 )
@@ -61,8 +59,7 @@ type Config struct {
 	dstFS    FileSystem
 	opts     Options
 
-	// getHomeDir returns the home directory of the remote user of the
-	// SSH session
+	// getHomeDir returns the home directory of the current local user
 	getHomeDir homeDirRetriever
 
 	// ProgressStream is a callback to return a read/writer for printing the progress
@@ -199,94 +196,85 @@ func (c *Config) initFS(sshClient *ssh.Client, client *sftp.Client) error {
 	}
 
 	if c.getHomeDir == nil {
-		c.getHomeDir = func() (string, error) {
-			return getRemoteHomeDir(sshClient)
-		}
+		c.getHomeDir = getLocalHomeDir
 	}
 
 	return trace.Wrap(c.expandPaths(srcOK, dstOK))
 }
 
 func (c *Config) expandPaths(srcIsRemote, dstIsRemote bool) (err error) {
-	srcHomeRetriever := getLocalHomeDir
-	if srcIsRemote {
-		srcHomeRetriever = c.getHomeDir
-	}
 	for i, srcPath := range c.srcPaths {
-		c.srcPaths[i], err = expandPath(srcPath, srcHomeRetriever)
+		c.srcPaths[i], err = expandPath(srcPath, srcIsRemote, c.getHomeDir)
 		if err != nil {
-			return trace.Wrap(err)
+			return trace.Wrap(err, "error expanding %q", srcPath)
 		}
 	}
 
-	dstHomeRetriever := getLocalHomeDir
-	if dstIsRemote {
-		dstHomeRetriever = c.getHomeDir
-	}
-	c.dstPath, err = expandPath(c.dstPath, dstHomeRetriever)
+	c.dstPath, err = expandPath(c.dstPath, dstIsRemote, c.getHomeDir)
+	return trace.Wrap(err, "error expanding %q", c.dstPath)
+}
 
-	return trace.Wrap(err)
+func expandPath(pathStr string, isRemotePath bool, getHomeDir homeDirRetriever) (string, error) {
+	pfxLen := homeDirPrefixLen(pathStr)
+	if pfxLen == -1 {
+		return pathStr, nil
+	}
+
+	// if the path is local, expand the path to be rooted at this user's
+	// home dir
+	if !isRemotePath {
+		homeDir, err := getHomeDir()
+		if err != nil {
+			return "", trace.Wrap(err)
+		}
+		// this is safe because we verified that all paths are non-empty
+		// in CreateUploadConfig/CreateDownloadConfig
+		return path.Join(homeDir, pathStr[1:]), nil
+	}
+
+	// avoid returning an empty string
+	if pathStr == "~" {
+		return ".", nil
+	}
+
+	// if an SFTP path is not absolute, it is assumed to start at the user's
+	// home directory so just strip the prefix and let the SFTP server
+	// figure out the correct remote path
+	return pathStr[pfxLen:], nil
+}
+
+// homeDirPrefixLen returns the length of a set of characters that
+// indicates the user wants the path to begin with a user's home
+// directory, or -1 if no such prefix exists.
+func homeDirPrefixLen(path string) int {
+	if len(path) == 1 && path == "~" {
+		return 1
+	}
+	if strings.HasPrefix(path, "~/") {
+		return 2
+	}
+	// allow '~\' or '~/' on Windows since '\' is the canonical path
+	// separator but some users may use '/' instead
+	if runtime.GOOS == "windows" && strings.HasPrefix(path, `~\`) {
+		return 2
+	}
+	if path[0] == '~' {
+		return 1
+	}
+
+	return -1
 }
 
 func getLocalHomeDir() (string, error) {
+	// TODO(capnspacehook): replace when https://github.com/gravitational/teleport/pull/24156 is merged
 	u, err := user.Current()
 	if err != nil {
 		return "", trace.Wrap(err)
 	}
+	if u.HomeDir == "" {
+		return "", trace.BadParameter("%s does not have a home directory, use an absolute path instead", u.Username)
+	}
 	return u.HomeDir, nil
-}
-
-func expandPath(pathStr string, getHomeDir homeDirRetriever) (string, error) {
-	if !needsExpansion(pathStr) {
-		return pathStr, nil
-	}
-
-	homeDir, err := getHomeDir()
-	if err != nil {
-		return "", trace.Wrap(err)
-	}
-
-	// this is safe because we verified that all paths are non-empty
-	// in CreateUploadConfig/CreateDownloadConfig
-	return path.Join(homeDir, pathStr[1:]), nil
-}
-
-// needsExpansion returns true if path is '~', '~/', or '~\' on Windows
-func needsExpansion(path string) bool {
-	if len(path) == 1 {
-		return path == "~"
-	}
-
-	// allow '~\' or '~/' on Windows since '\' is the canonical path
-	// separator but some users may use '/' instead
-	if runtime.GOOS == "windows" && strings.HasPrefix(path, `~\`) {
-		return true
-	}
-	return strings.HasPrefix(path, "~/")
-}
-
-// getRemoteHomeDir returns the home directory of the remote user of
-// the SSH connection
-func getRemoteHomeDir(sshClient *ssh.Client) (string, error) {
-	s, err := sshClient.NewSession()
-	if err != nil {
-		return "", trace.Wrap(err)
-	}
-	defer s.Close()
-	if err := s.RequestSubsystem(teleport.GetHomeDirSubsystem); err != nil {
-		return "", trace.Wrap(err)
-	}
-	r, err := s.StdoutPipe()
-	if err != nil {
-		return "", trace.Wrap(err)
-	}
-
-	var homeDirBuf bytes.Buffer
-	if _, err := io.Copy(&homeDirBuf, r); err != nil {
-		return "", trace.Wrap(err)
-	}
-
-	return homeDirBuf.String(), nil
 }
 
 // transfer performs file transfers
