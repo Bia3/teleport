@@ -376,8 +376,9 @@ var SupportedAWSDatabaseMatchers = []string{
 
 // RequireAWSIAMRolesAsUsersMatchers is a list of the AWS databases that
 // require AWS IAM roles as database users.
-// TODO(gavin): if we add database matchers for AWS keyspaces, OpenSearch, or
-// DynamoDB discovery, add them here.
+// IMPORTANT: if you add database matchers for AWS keyspaces, OpenSearch, or
+// DynamoDB discovery, add them here and in RequireAWSIAMRolesAsUsers in
+// api/types.
 var RequireAWSIAMRolesAsUsersMatchers = []string{
 	AWSMatcherRedshiftServerless,
 }
