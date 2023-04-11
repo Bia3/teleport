@@ -56,7 +56,7 @@ const (
 // consumer is responsible for receiving messages from SQS, batching them up to
 // certain size or interval, and writes to s3 as parquet file.
 type consumer struct {
-	*log.Entry
+	logger              *log.Entry
 	backend             backend.Backend
 	storeLocationPrefix string
 	storeLocationBucket string
@@ -103,7 +103,7 @@ func newConsumer(cfg Config, awsCfg aws.Config, backend backend.Backend, logEntr
 	s3client := s3.NewFromConfig(awsCfg)
 	sqsReceiver := sqs.NewFromConfig(awsCfg)
 	return &consumer{
-		Entry:               logEntry,
+		logger:              logEntry,
 		backend:             backend,
 		storeLocationPrefix: strings.TrimSuffix(strings.TrimPrefix(u.Path, "/"), "/"),
 		storeLocationBucket: u.Host,
@@ -141,10 +141,10 @@ func (c *consumer) run(ctx context.Context) {
 		if err != nil {
 			// Ctx.Cancel is used to stop batcher
 			if ctx.Err() != nil {
-				c.Debug("Batcher has been stopped")
+				c.logger.Debug("Batcher has been stopped")
 				return
 			}
-			c.Errorf("Batcher single run failed: %v", err)
+			c.logger.Errorf("Batcher single run failed: %v", err)
 		}
 	}
 }
@@ -157,13 +157,13 @@ func (c *consumer) singleBatch(ctx context.Context) error {
 	var size int
 	// TODO(tobiaszheller): we need some metrics to track it.
 	defer func() {
-		c.Debugf("Batch of %d took: %s", size, time.Since(start))
+		c.logger.Debugf("Batch of %d took: %s", size, time.Since(start))
 	}()
 
-	msgsCollector := newSqsMessagesCollector(c.collectConfig, c.Entry, func(ctx context.Context, errC chan error) {
+	msgsCollector := newSqsMessagesCollector(c.collectConfig, c.logger, func(ctx context.Context, errC chan error) {
 		err := trace.NewAggregateFromChannel(errC, ctx)
 		if err != nil {
-			c.Entry.WithError(err).Error("Failure processing SQS messages")
+			c.logger.WithError(err).Error("Failure processing SQS messages")
 		}
 	})
 
@@ -187,7 +187,7 @@ func (c *consumer) singleBatch(ctx context.Context) error {
 // sqsMessagesCollector is responsible for collecting messages from SQS and
 // writing to on channel.
 type sqsMessagesCollector struct {
-	log           *log.Entry
+	logger        *log.Entry
 	config        sqsCollectConfig
 	errHandlingFn func(ctx context.Context, errC chan error)
 	eventsChan    chan eventAndAckID
@@ -197,7 +197,7 @@ type sqsMessagesCollector struct {
 // Collector sends collected messages from SQS on events channel.
 func newSqsMessagesCollector(cfg sqsCollectConfig, log *log.Entry, errHandlingFn func(ctx context.Context, errC chan error)) *sqsMessagesCollector {
 	return &sqsMessagesCollector{
-		log:           log,
+		logger:        log,
 		config:        cfg,
 		errHandlingFn: errHandlingFn,
 		eventsChan:    make(chan eventAndAckID, cfg.batchMaxItems),
@@ -401,7 +401,7 @@ func (s *sqsMessagesCollector) downloadEventFromS3(ctx context.Context, payload 
 	path := payload
 	versionID := ""
 
-	s.log.Debugf("Downloading %v %v [%v].", s.config.payloadBucket, path, versionID)
+	s.logger.Debugf("Downloading %v %v [%v].", s.config.payloadBucket, path, versionID)
 
 	buf := manager.NewWriteAtBuffer([]byte{})
 	written, err := s.config.payloadDownloader.Download(ctx, buf, &s3.GetObjectInput{
@@ -451,7 +451,7 @@ func (c *consumer) writeToS3(ctx context.Context, eventsChan <-chan eventAndAckI
 				return size, nil
 			}
 			size++
-			c.Debugf("Received event: %s %s", eventAndAckID.event.UID, eventAndAckID.event.EventType)
+			c.logger.Debugf("Received event: %s %s", eventAndAckID.event.UID, eventAndAckID.event.EventType)
 		}
 	}
 }
