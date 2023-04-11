@@ -232,6 +232,10 @@ func buildAWSConfigurator(manual bool, flags configureDatabaseAWSFlags) (configu
 			configuratorFlags.ForceElastiCachePermissions = true
 		case types.DatabaseTypeMemoryDB:
 			configuratorFlags.ForceMemoryDBPermissions = true
+		case types.DatabaseTypeAWSKeyspaces:
+			configuratorFlags.ForceAWSKeyspacesPermissions = true
+		case types.DatabaseTypeDynamoDB:
+			configuratorFlags.ForceDynamoDBPermissions = true
 		}
 	}
 

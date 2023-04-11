@@ -726,6 +726,10 @@ func hasMemoryDBDatabases(flags configurators.BootstrapFlags, fileConfig *config
 
 // hasAWSKeyspacesDatabases checks if the agent needs permission for AWS Keyspaces.
 func hasAWSKeyspacesDatabases(flags configurators.BootstrapFlags, fileConfig *config.FileConfig) bool {
+	if flags.ForceAWSKeyspacesPermissions {
+		return true
+	}
+
 	// There is no auto discovery for AWS Keyspaces.
 	if flags.DiscoveryService {
 		return false
@@ -738,6 +742,10 @@ func hasAWSKeyspacesDatabases(flags configurators.BootstrapFlags, fileConfig *co
 
 // hasDynamoDBDatabases checks if the agent needs permission for AWS DynamoDB.
 func hasDynamoDBDatabases(flags configurators.BootstrapFlags, fileConfig *config.FileConfig) bool {
+	if flags.ForceDynamoDBPermissions {
+		return true
+	}
+
 	// There is no auto discovery for AWS DynamoDB.
 	if flags.DiscoveryService {
 		return false
