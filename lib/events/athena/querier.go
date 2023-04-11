@@ -388,7 +388,7 @@ func (rb *responseBuilder) appendUntilSizeLimit(resultResp *athena.GetQueryResul
 
 		var fields events.EventFields
 		if err := utils.FastUnmarshal([]byte(eventData), &fields); err != nil {
-			return false, trace.Errorf("failed to unmarshal event %v, %s", err, eventData)
+			return false, trace.Wrap(err, "failed to unmarshal event, %s", eventData)
 		}
 		event, err := events.FromEventFields(fields)
 		if err != nil {
