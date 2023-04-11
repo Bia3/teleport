@@ -27,6 +27,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	sqsTypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/google/uuid"
+	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
 
@@ -202,7 +203,7 @@ func (f *fakeSQS) ReceiveMessage(ctx context.Context, params *sqs.ReceiveMessage
 
 	randInt, err := rand.Int(rand.Reader, big.NewInt(f.maxWaitTime.Nanoseconds()))
 	if err != nil {
-		panic(err)
+		return nil, trace.Wrap(err)
 	}
 	select {
 	case <-ctx.Done():
