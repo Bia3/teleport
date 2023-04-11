@@ -61,20 +61,6 @@ type Role struct {
 	identityBase
 }
 
-// String returns the AWS identity ARN for the role. If the role is
-// an assumed-role, it is converted to the IAM role ARN instead of the
-// assumed-role ARN. This is necessary since identity.String() is used in
-// AWS IAM policy statements as the resource, and assumed-role is invalid
-// for those statements.
-func (r Role) String() string {
-	if r.GetType() == resourceTypeRole {
-		return r.identityBase.String()
-	}
-	arn := r.identityBase.arn
-	arn.Resource = fmt.Sprintf("%s/%s", resourceTypeRole, r.GetName())
-	return arn.String()
-}
-
 // Unknown represents an unknown/unsupported AWS IAM identity.
 type Unknown struct {
 	identityBase
