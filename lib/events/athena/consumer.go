@@ -167,17 +167,16 @@ func (c *consumer) singleBatch(ctx context.Context) error {
 		}
 	})
 
-	// eventsChan is used for communication between [fromSQS] and [writeToS3].
-	eventsChan := msgsCollector.getEventsChan()
-
 	readSQSCtx, readCancel := context.WithTimeout(ctx, c.batchMaxInterval)
 	defer readCancel()
 
+	// msgsCollector and writeToS3 runs concurrently, and use events channel
+	// to send messages from collector to writeToS3.
 	go func() {
 		msgsCollector.fromSQS(readSQSCtx)
 	}()
 	var err error
-	size, err = c.writeToS3(ctx, eventsChan)
+	size, err = c.writeToS3(ctx, msgsCollector.getEventsChan())
 	if err != nil {
 		return trace.Wrap(err)
 	}
