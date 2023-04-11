@@ -37,11 +37,12 @@ import (
 )
 
 func Test_consumer_sqsMessagesCollector(t *testing.T) {
-	fatalOnErrFunc := func(ctx context.Context, errC chan error) {
+	failOnErrFunc := func(ctx context.Context, errC chan error) {
 		err, ok := <-errC
 		if ok && err != nil {
 			// we don't expect error in that test case.
-			t.Fatal(err)
+			t.Log("Unexpected error", err)
+			t.Fail()
 		}
 	}
 	// channelClosedCondition returns function that can be used to check if eventually
@@ -51,7 +52,8 @@ func Test_consumer_sqsMessagesCollector(t *testing.T) {
 			select {
 			case _, ok := <-ch:
 				if ok {
-					t.Fatal("don't expect message here, fail")
+					t.Log("Received unexpected message")
+					t.Fail()
 					return false
 				} else {
 					// channel is closed, that's what we are waiting for.
@@ -82,7 +84,7 @@ func Test_consumer_sqsMessagesCollector(t *testing.T) {
 		c := newSqsMessagesCollector(sqsCollectConfig{
 			sqsReceiver:   fq,
 			batchMaxItems: 20000,
-		}, log, fatalOnErrFunc)
+		}, log, failOnErrFunc)
 		eventsChan := c.getEventsChan()
 
 		readSQSCtx, readCancel := context.WithCancel(context.Background())
@@ -123,7 +125,7 @@ func Test_consumer_sqsMessagesCollector(t *testing.T) {
 		c := newSqsMessagesCollector(sqsCollectConfig{
 			sqsReceiver:   fq,
 			batchMaxItems: 20000,
-		}, log, fatalOnErrFunc)
+		}, log, failOnErrFunc)
 		eventsChan := c.getEventsChan()
 
 		readSQSCtx, readCancel := context.WithCancel(context.Background())
@@ -151,7 +153,7 @@ func Test_consumer_sqsMessagesCollector(t *testing.T) {
 		c := newSqsMessagesCollector(sqsCollectConfig{
 			sqsReceiver:   fq,
 			batchMaxItems: 3,
-		}, log, fatalOnErrFunc)
+		}, log, failOnErrFunc)
 
 		eventsChan := c.getEventsChan()
 
