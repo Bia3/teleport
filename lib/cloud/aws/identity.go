@@ -42,6 +42,15 @@ type Identity interface {
 	fmt.Stringer
 }
 
+const (
+	// resourceTypeRole is the resource type for an AWS IAM role.
+	resourceTypeRole = "role"
+	// resourceTypeAssumedRole is the resource type for an AWS IAM assumed role.
+	resourceTypeAssumedRole = "assumed-role"
+	// resourceTypeUser is the resource type for an AWS IAM user.
+	resourceTypeUser = "user"
+)
+
 // User represents an AWS IAM user identity.
 type User struct {
 	identityBase
@@ -50,6 +59,20 @@ type User struct {
 // Role represents an AWS IAM role identity.
 type Role struct {
 	identityBase
+}
+
+// String returns the AWS identity ARN for the role. If the role is
+// an assumed-role, it is converted to the IAM role ARN instead of the
+// assumed-role ARN. This is necessary since identity.String() is used in
+// AWS IAM policy statements as the resource, and assumed-role is invalid
+// for those statements.
+func (r Role) String() string {
+	if r.GetType() == resourceTypeRole {
+		return r.identityBase.String()
+	}
+	arn := r.identityBase.arn
+	arn.Resource = fmt.Sprintf("%s/%s", resourceTypeRole, r.GetName())
+	return arn.String()
 }
 
 // Unknown represents an unknown/unsupported AWS IAM identity.
@@ -66,12 +89,12 @@ func (i identityBase) GetName() string {
 	parts := strings.Split(i.arn.Resource, "/")
 	// EC2 instances running on AWS with attached IAM role will have
 	// assumed-role identity with ARN like:
-	// arn:aws:sts::1234567890:assumed-role/DatabaseAccess/i-1234567890
-	if parts[0] == "assumed-role" && len(parts) > 2 {
+	// arn:aws:sts::123456789012:assumed-role/DatabaseAccess/i-1234567890
+	if parts[0] == resourceTypeAssumedRole && len(parts) > 2 {
 		return parts[1]
 	}
 	// Resource can include a path and the name is its last component e.g.
-	// arn:aws:iam::1234567890:role/path/to/customrole
+	// arn:aws:iam::123456789012:role/path/to/customrole
 	return parts[len(parts)-1]
 }
 
@@ -115,13 +138,13 @@ func IdentityFromArn(arnString string) (Identity, error) {
 
 	parts := strings.Split(parsedARN.Resource, "/")
 	switch parts[0] {
-	case "role", "assumed-role":
+	case resourceTypeRole, resourceTypeAssumedRole:
 		return Role{
 			identityBase: identityBase{
 				arn: parsedARN,
 			},
 		}, nil
-	case "user":
+	case resourceTypeUser:
 		return User{
 			identityBase: identityBase{
 				arn: parsedARN,

@@ -44,7 +44,11 @@ func TestAWSIAMDocuments(t *testing.T) {
 	userTarget, err := awslib.IdentityFromArn("arn:aws:iam::123456789012:user/example-user")
 	require.NoError(t, err)
 
-	roleTarget, err := awslib.IdentityFromArn("arn:aws:iam::123456789012:role/example-role")
+	roleARN := "arn:aws:iam::123456789012:role/example-role"
+	roleTarget, err := awslib.IdentityFromArn(roleARN)
+	require.NoError(t, err)
+
+	assumedRoleTarget, err := awslib.IdentityFromArn("arn:aws:iam::123456789012:assumed-role/example-role/i-12345")
 	require.NoError(t, err)
 
 	unknownIdentity, err := awslib.IdentityFromArn("arn:aws:iam::123456789012:ec2/example-ec2")
@@ -123,7 +127,7 @@ func TestAWSIAMDocuments(t *testing.T) {
 			},
 		},
 		"RDS static database": {
-			target: roleTarget,
+			target: assumedRoleTarget,
 			fileConfig: &config.FileConfig{
 				Databases: config.Databases{
 					Databases: []*config.Database{
@@ -140,7 +144,7 @@ func TestAWSIAMDocuments(t *testing.T) {
 					"rds:DescribeDBInstances", "rds:ModifyDBInstance",
 					"rds:DescribeDBClusters", "rds:ModifyDBCluster",
 				}},
-				{Effect: awslib.EffectAllow, Resources: []string{roleTarget.String()}, Actions: []string{
+				{Effect: awslib.EffectAllow, Resources: []string{roleARN}, Actions: []string{
 					"iam:GetRolePolicy", "iam:PutRolePolicy", "iam:DeleteRolePolicy",
 				}},
 			},
@@ -150,7 +154,7 @@ func TestAWSIAMDocuments(t *testing.T) {
 					"rds:DescribeDBClusters", "rds:ModifyDBCluster",
 					"rds-db:connect",
 				}},
-				{Effect: awslib.EffectAllow, Resources: []string{roleTarget.String()}, Actions: []string{
+				{Effect: awslib.EffectAllow, Resources: []string{roleARN}, Actions: []string{
 					"iam:GetRolePolicy", "iam:PutRolePolicy", "iam:DeleteRolePolicy",
 				}},
 			},
@@ -1006,10 +1010,13 @@ func TestAWSPoliciesAttacher(t *testing.T) {
 }
 
 func TestAWSPoliciesTarget(t *testing.T) {
-	userIdentity, err := awslib.IdentityFromArn("arn:aws:iam::1234567:user/example-user")
+	userIdentity, err := awslib.IdentityFromArn("arn:aws:iam::123456789012:user/example-user")
 	require.NoError(t, err)
 
-	roleIdentity, err := awslib.IdentityFromArn("arn:aws:iam::1234567:role/example-role")
+	roleIdentity, err := awslib.IdentityFromArn("arn:aws:iam::123456789012:role/example-role")
+	require.NoError(t, err)
+
+	assumedRoleIdentity, err := awslib.IdentityFromArn("arn:aws:iam::123456789012:assumed-role/example-role/i-12345")
 	require.NoError(t, err)
 
 	tests := map[string]struct {
@@ -1069,6 +1076,14 @@ func TestAWSPoliciesTarget(t *testing.T) {
 			targetName:        roleIdentity.GetName(),
 			targetAccountID:   roleIdentity.GetAccountID(),
 			targetPartitionID: roleIdentity.GetPartition(),
+		},
+		"AssumedRoleFromIdentity": {
+			flags:             configurators.BootstrapFlags{},
+			identity:          roleIdentity,
+			targetType:        awslib.Role{},
+			targetName:        assumedRoleIdentity.GetName(),
+			targetAccountID:   assumedRoleIdentity.GetAccountID(),
+			targetPartitionID: assumedRoleIdentity.GetPartition(),
 		},
 		"DefaultTarget": {
 			flags:             configurators.BootstrapFlags{},

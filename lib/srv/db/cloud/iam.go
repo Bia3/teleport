@@ -246,7 +246,7 @@ func (c *IAM) processTask(ctx context.Context, task iamTask) error {
 		return trace.Wrap(err)
 	}
 
-	// Encode the identity as base64 without padding, since the backend Sanetizer
+	// Encode the identity as base64 without padding, since the backend Sanitizer
 	// will reject any semaphor with "//" in it.
 	semName := configurator.cfg.identity.String()
 	encodedName := base64.RawStdEncoding.EncodeToString([]byte(semName))
