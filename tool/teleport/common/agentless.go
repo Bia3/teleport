@@ -22,6 +22,7 @@ import (
 	"crypto/tls"
 	"encoding/pem"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,7 +47,7 @@ import (
 
 const sshdBinary = "sshd"
 
-const sshdConfigSectionModificationHeader = "### Created by 'teleport join openssh', do not edit"
+const sshdConfigSectionModificationHeader = "# Created by 'teleport join openssh', do not edit"
 
 var (
 	// agentlessSSHDConfigPath is the path to write teleport specific SSHD config options
@@ -70,9 +71,9 @@ const (
 )
 
 type agentlessKeys struct {
-	privateKey                      []byte
-	certs                           *proto.Certs
-	openSSHCA, hostSSHCA, hostTLSCA []byte
+	privateKey []byte
+	certs      *proto.Certs
+	openSSHCA  []byte
 }
 
 func writeKeys(keysDir string, keys agentlessKeys) error {
@@ -92,18 +93,18 @@ func writeKeys(keysDir string, keys agentlessKeys) error {
 		return trace.Wrap(err)
 	}
 
-	if err := os.WriteFile(filepath.Join(keysDir, teleportSSHHostCA), keys.hostSSHCA, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(keysDir, teleportSSHHostCA), append([]byte{}, keys.certs.SSHCACerts[0]...), 0600); err != nil {
 		return trace.Wrap(err)
 	}
-	if err := os.WriteFile(filepath.Join(keysDir, teleportTLSHostCA), keys.hostTLSCA, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(keysDir, teleportTLSHostCA), append([]byte{}, keys.certs.TLSCACerts[0]...), 0600); err != nil {
 		return trace.Wrap(err)
 	}
 
 	return nil
 }
 
-// GenerateKeys generates TLS and SSH keypairs.
-func GenerateKeys() (privateKey, publicKey, tlsPublicKey []byte, err error) {
+// generateKeys generates TLS and SSH keypairs.
+func generateKeys() (privateKey, publicKey, tlsPublicKey []byte, err error) {
 	privateKey, publicKey, err = native.GenerateKeyPair()
 	if err != nil {
 		return nil, nil, nil, trace.Wrap(err)
@@ -121,7 +122,7 @@ func GenerateKeys() (privateKey, publicKey, tlsPublicKey []byte, err error) {
 	return privateKey, publicKey, tlsPublicKey, nil
 }
 
-func ReadKeys(clf config.CommandLineFlags) (privateKey, publicKey, tlsPublicKey []byte, certs *proto.Certs, err error) {
+func readKeys(clf config.CommandLineFlags) (privateKey, publicKey, tlsPublicKey []byte, certs *proto.Certs, err error) {
 	privateKey, err = os.ReadFile(filepath.Join(clf.OpenSSHKeysPath, teleportKey))
 	if err != nil {
 		return nil, nil, nil, nil, trace.ConvertSystemError(err)
@@ -194,7 +195,6 @@ func authenticatedUserClientFromIdentity(ctx context.Context, insecure, fips boo
 	}
 
 	c, err := authclient.Connect(ctx, authClientConfig)
-
 	return c, trace.Wrap(err)
 }
 
@@ -204,10 +204,10 @@ func getAWSInstanceHostname(ctx context.Context, imds agentlessIMDS) (string, er
 		return "", trace.Wrap(err)
 	}
 	hostname = strings.ReplaceAll(hostname, " ", "_")
-	if utils.IsValidHostname(hostname) {
-		return hostname, nil
+	if !utils.IsValidHostname(hostname) {
+		return "", trace.NotFound("failed to get a valid hostname from IMDS")
 	}
-	return "", trace.NotFound("failed to get a valid hostname from IMDS")
+	return hostname, nil
 }
 
 func tryCreateDefaultAgentlesKeysDir(agentlessKeysPath string) error {
@@ -249,6 +249,7 @@ type agentless struct {
 	defaultKeysDir       string
 	defaultBackupKeysDir string
 	restartSSHD          func() error
+	checkSSHD            func(path string) error
 	clock                clockwork.Clock
 	accountID            string
 	instanceID           string
@@ -314,10 +315,10 @@ func newAgentless(ctx context.Context, clf config.CommandLineFlags) (*agentless,
 
 	var instAddr string
 	if publicIP != "" {
-		instAddr = fmt.Sprintf("%s:22", publicIP)
+		instAddr = net.JoinHostPort(publicIP, "22")
 	}
 	if instAddr == "" && localIP != "" {
-		instAddr = fmt.Sprintf("%s:22", localIP)
+		instAddr = net.JoinHostPort(localIP, "22")
 	}
 
 	region, err := imds.GetRegion(ctx)
@@ -334,6 +335,7 @@ func newAgentless(ctx context.Context, clf config.CommandLineFlags) (*agentless,
 		defaultKeysDir:       agentlessKeysDir,
 		defaultBackupKeysDir: agentlessKeysBackupDir,
 		restartSSHD:          restartSSHD,
+		checkSSHD:            checkSSHDConfig,
 		accountID:            accountID,
 		instanceID:           instanceID,
 		instanceAddr:         instAddr,
@@ -370,25 +372,7 @@ func (a *agentless) register(clf config.CommandLineFlags, sshPublicKey, tlsPubli
 		return nil, trace.Wrap(err)
 	}
 
-	return certs, trace.Wrap(err)
-}
-
-func (a *agentless) getHostCA(ctx context.Context, client auth.ClientI) (hostSSHCA []byte, hostTLSCA []byte, err error) {
-	cas, err := client.GetCertAuthorities(ctx, types.HostCA, false)
-	if err != nil {
-		return nil, nil, trace.Wrap(err)
-	}
-
-	for _, ca := range cas {
-		for _, key := range ca.GetTrustedSSHKeyPairs() {
-			hostSSHCA = append(hostSSHCA, key.PublicKey...)
-		}
-		for _, key := range ca.GetTrustedTLSKeyPairs() {
-			hostTLSCA = append(hostTLSCA, key.Cert...)
-		}
-	}
-
-	return hostSSHCA, hostTLSCA, nil
+	return certs, nil
 }
 
 func (a *agentless) getOpenSSHCA(ctx context.Context, client auth.ClientI) ([]byte, error) {
@@ -407,7 +391,18 @@ func (a *agentless) getOpenSSHCA(ctx context.Context, client auth.ClientI) ([]by
 	return openSSHCA, nil
 }
 
-func (a *agentless) updateKeysAndConfig(ctx context.Context, clf config.CommandLineFlags, newKeys agentlessKeys) error {
+func (a *agentless) updateKeysAndConfig(ctx context.Context, client auth.ClientI, clf config.CommandLineFlags, privateKey []byte, certs *proto.Certs) error {
+	openSSHCA, err := a.getOpenSSHCA(ctx, client)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	newKeys := agentlessKeys{
+		privateKey: privateKey,
+		certs:      certs,
+		openSSHCA:  openSSHCA,
+	}
+
 	exists, err := a.existingKeysPresent(clf)
 	if err != nil {
 		return trace.Wrap(err)
@@ -439,7 +434,7 @@ func (a *agentless) updateKeysAndConfig(ctx context.Context, clf config.CommandL
 	}
 
 	fmt.Println("Updating OpenSSH config")
-	if err := updateSSHDConfig(
+	if err := a.updateSSHDConfig(
 		clf.OpenSSHConfigPath,
 		agentlessSSHDConfigPath,
 		filepath.Join(clf.OpenSSHKeysPath, teleportOpenSSHCA),
@@ -463,107 +458,115 @@ func (a *agentless) existingKeysPresent(clf config.CommandLineFlags) (bool, erro
 	return true, nil
 }
 
-// openSSHInitialJoin
-func (a *agentless) openSSHInitialJoin(ctx context.Context, clf config.CommandLineFlags) error {
-	existing, err := a.existingKeysPresent(clf)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	privateKey, sshPublicKey, tlsPublicKey, err := GenerateKeys()
+func (a *agentless) init(ctx context.Context, clf config.CommandLineFlags) error {
+	privateKey, sshPublicKey, tlsPublicKey, err := generateKeys()
 	if err != nil {
 		return trace.Wrap(err, "unable to generate new keypairs")
 	}
 
-	var client auth.ClientI
-	var certs *proto.Certs
-
-	if existing {
-		exPrivateKey, _, _, exCerts, err := ReadKeys(clf)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		identity, err := auth.ReadIdentityFromKeyPair(exPrivateKey, exCerts)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-
-		// todo(amk): if this or generate host certs fails, should we try to blowaway /etc/teleport/agentless and start from scratch in else section?
-		client, err = authenticatedUserClientFromIdentity(ctx, clf.InsecureMode, clf.FIPS, *a.proxyAddr, identity)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		defer client.Close()
-		certs, err = client.GenerateHostCerts(ctx, &proto.HostCertsRequest{
-			HostID:               a.uuid,
-			NodeName:             a.hostname,
-			Role:                 types.RoleNode,
-			AdditionalPrincipals: a.principals,
-			PublicTLSKey:         tlsPublicKey,
-			PublicSSHKey:         sshPublicKey,
-		})
-		if err != nil {
-			return trace.Wrap(err)
-		}
-	} else {
-		certs, err = a.register(clf, sshPublicKey, tlsPublicKey)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-
-		identity, err := auth.ReadIdentityFromKeyPair(privateKey, certs)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-
-		client, err = authenticatedUserClientFromIdentity(ctx, clf.InsecureMode, clf.FIPS, *a.proxyAddr, identity)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		defer client.Close()
-	}
-
-	openSSHCA, err := a.getOpenSSHCA(ctx, client)
+	certs, err := a.register(clf, sshPublicKey, tlsPublicKey)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	hostSSHCA, hostTLSCA, err := a.getHostCA(ctx, client)
+	identity, err := auth.ReadIdentityFromKeyPair(privateKey, certs)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	err = a.updateKeysAndConfig(ctx, clf, agentlessKeys{
-		privateKey: privateKey,
-		certs:      certs,
-		openSSHCA:  openSSHCA,
-		hostSSHCA:  hostSSHCA,
-		hostTLSCA:  hostTLSCA,
+	client, err := authenticatedUserClientFromIdentity(ctx, clf.InsecureMode, clf.FIPS, *a.proxyAddr, identity)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	defer client.Close()
+
+	if err := a.updateKeysAndConfig(ctx, client, clf, privateKey, certs); err != nil {
+		return trace.Wrap(err)
+	}
+
+	if err := a.maybeRestartSSHD(clf); err != nil {
+		return trace.Wrap(err)
+	}
+
+	if err := a.registerServer(ctx, client, types.RotationPhaseStandby); err != nil {
+		return trace.Wrap(err)
+	}
+
+	return nil
+}
+
+func (a *agentless) maybeRestartSSHD(clf config.CommandLineFlags) error {
+	if !clf.RestartOpenSSH {
+		return nil
+	}
+	fmt.Println("Restarting the OpenSSH daemon")
+	if err := a.restartSSHD(); err != nil {
+		return trace.Wrap(err)
+	}
+	return nil
+}
+
+func (a *agentless) rotate(ctx context.Context, clf config.CommandLineFlags) error {
+	exPrivateKey, _, _, exCerts, err := readKeys(clf)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	identity, err := auth.ReadIdentityFromKeyPair(exPrivateKey, exCerts)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	client, err := authenticatedUserClientFromIdentity(ctx, clf.InsecureMode, clf.FIPS, *a.proxyAddr, identity)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	defer client.Close()
+
+	privateKey, sshPublicKey, tlsPublicKey, err := generateKeys()
+	if err != nil {
+		return trace.Wrap(err, "unable to generate new keypairs")
+	}
+
+	certs, err := client.GenerateHostCerts(ctx, &proto.HostCertsRequest{
+		HostID:               a.uuid,
+		NodeName:             a.hostname,
+		Role:                 types.RoleNode,
+		AdditionalPrincipals: a.principals,
+		PublicTLSKey:         tlsPublicKey,
+		PublicSSHKey:         sshPublicKey,
 	})
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	if clf.RestartOpenSSH {
-		fmt.Println("Restarting the OpenSSH daemon")
-		if err := a.restartSSHD(); err != nil {
-			return trace.Wrap(err)
-		}
+	if err := a.updateKeysAndConfig(ctx, client, clf, privateKey, certs); err != nil {
+		return trace.Wrap(err)
 	}
 
+	if err := a.maybeRestartSSHD(clf); err != nil {
+		return trace.Wrap(err)
+	}
+
+	if err := a.registerServer(ctx, client, types.RotationPhaseUpdateServers); err != nil {
+		return trace.Wrap(err)
+	}
+	return nil
+}
+
+func (a *agentless) registerServer(ctx context.Context, client auth.ClientI, phase string) error {
 	fmt.Println("Attempting to register node")
 	server, err := types.NewServer(a.uuid, types.KindNode, types.ServerSpecV2{
 		Addr:     a.instanceAddr,
 		Hostname: a.hostname,
 		Rotation: types.Rotation{
 			LastRotated: a.clock.Now(),
-			Phase:       types.RotationPhaseStandby,
+			Phase:       phase,
 		},
 	})
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	server.SetSubKind("openssh")
+	server.SetSubKind(types.SubKindOpenSSHNode)
 	server.SetStaticLabels(map[string]string{
 		types.AWSAccountIDLabel:  a.accountID,
 		types.AWSInstanceIDLabel: a.instanceID,
@@ -573,11 +576,29 @@ func (a *agentless) openSSHInitialJoin(ctx context.Context, clf config.CommandLi
 	if _, err := client.UpsertNode(ctx, server); err != nil {
 		return trace.Wrap(err)
 	}
-
 	return nil
 }
 
-func (a *agentless) openSSHRotateStageRollback(ctx context.Context, clf config.CommandLineFlags) error {
+func (a *agentless) openSSHJoin(ctx context.Context, clf config.CommandLineFlags) error {
+	existing, err := a.existingKeysPresent(clf)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	if !existing {
+		if err := a.init(ctx, clf); err != nil {
+			return trace.Wrap(err)
+		}
+		return nil
+	}
+
+	if err := a.rotate(ctx, clf); err != nil {
+		return trace.Wrap(err)
+	}
+	return nil
+}
+
+func (a *agentless) openSSHRollback(ctx context.Context, clf config.CommandLineFlags) error {
 	if err := os.RemoveAll(clf.OpenSSHKeysPath); err != nil {
 		return trace.Wrap(err)
 	}
@@ -587,12 +608,16 @@ func (a *agentless) openSSHRotateStageRollback(ctx context.Context, clf config.C
 		return trace.Wrap(err)
 	}
 
-	exPrivateKey, _, _, exCerts, err := ReadKeys(clf)
+	exPrivateKey, _, _, exCerts, err := readKeys(clf)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	identity, err := auth.ReadIdentityFromKeyPair(exPrivateKey, exCerts)
 	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	if err := a.restartSSHD(); err != nil {
 		return trace.Wrap(err)
 	}
 
@@ -602,29 +627,7 @@ func (a *agentless) openSSHRotateStageRollback(ctx context.Context, clf config.C
 		return trace.Wrap(err)
 	}
 
-	server, err := types.NewServer(a.uuid, types.KindNode, types.ServerSpecV2{
-		Addr:     a.instanceAddr,
-		Hostname: a.hostname,
-		Rotation: types.Rotation{
-			LastRotated: a.clock.Now(),
-			Phase:       types.RotationPhaseStandby,
-		},
-	})
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	server.SetSubKind("openssh")
-	server.SetStaticLabels(map[string]string{
-		types.AWSAccountIDLabel:  a.accountID,
-		types.AWSInstanceIDLabel: a.instanceID,
-		types.AWSInstanceRegion:  a.region,
-	})
-
-	if _, err := client.UpsertNode(ctx, server); err != nil {
-		return trace.Wrap(err)
-	}
-
-	if err := a.restartSSHD(); err != nil {
+	if err := a.registerServer(ctx, client, types.RotationPhaseRollback); err != nil {
 		return trace.Wrap(err)
 	}
 	return nil
@@ -667,8 +670,15 @@ HostCertificate %s
 	)
 }
 
-func updateSSHDConfig(sshdConfigPath, teleportSSHDConfigPath, opensshCAPath string,
-	hostKeys, hostCerts []string) error {
+func checkSSHDConfig(path string) error {
+	cmd := exec.Command(sshdBinary, "-t", "-f", path)
+	if err := cmd.Run(); err != nil {
+		return trace.Wrap(err, "teleport generated an invalid ssh config file, not writing")
+	}
+	return nil
+}
+
+func (a *agentless) updateSSHDConfig(sshdConfigPath, teleportSSHDConfigPath, opensshCAPath string, hostKeys, hostCerts []string) error {
 	needsUpdate, err := checkSSHDConfigAlreadyUpdated(sshdConfigPath, agentlessSSHDConfigInclude)
 	if err != nil {
 		return trace.Wrap(err)
@@ -698,9 +708,8 @@ func updateSSHDConfig(sshdConfigPath, teleportSSHDConfigPath, opensshCAPath stri
 		return trace.Wrap(err)
 	}
 
-	cmd := exec.Command(sshdBinary, "-t", "-f", sshdConfigTmp.Name())
-	if err := cmd.Run(); err != nil {
-		return trace.Wrap(err, "teleport generated an invalid ssh config file, not writing")
+	if err := a.checkSSHD(sshdConfigTmp.Name()); err != nil {
+		return trace.Wrap(err)
 	}
 
 	if err := os.Rename(sshdConfigTmp.Name(), teleportSSHDConfigPath); err != nil {

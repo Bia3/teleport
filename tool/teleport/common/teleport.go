@@ -540,11 +540,11 @@ func onJoinOpenSSH(clf config.CommandLineFlags) error {
 	}
 	switch clf.RotateOpenSSH {
 	case types.RotationPhaseUpdateServers, "":
-		err = al.openSSHInitialJoin(ctx, clf)
+		err = al.openSSHJoin(ctx, clf)
 	case types.RotationPhaseRollback:
-		err = al.openSSHRotateStageRollback(ctx, clf)
+		err = al.openSSHRollback(ctx, clf)
 	default:
-		return trace.BadParameter("invalid operation")
+		return trace.BadParameter("invalid rotation operation %q, expected %q or %q", clf.RotateOpenSSH, types.RotationPhaseUpdateServers, types.RotationPhaseRollback)
 	}
 	if err != nil {
 		return trace.Wrap(err)

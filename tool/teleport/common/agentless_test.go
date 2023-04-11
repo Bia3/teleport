@@ -79,6 +79,9 @@ func TestAgentless(t *testing.T) {
 			sshdRestarted = true
 			return nil
 		},
+		checkSSHD: func(path string) error {
+			return nil
+		},
 	}
 
 	ctx := context.Background()
@@ -107,7 +110,7 @@ func TestAgentless(t *testing.T) {
 		RestartOpenSSH:        true,
 	}
 
-	err = ag.openSSHInitialJoin(ctx, clf)
+	err = ag.openSSHJoin(ctx, clf)
 	require.NoError(t, err)
 	_, err = server.Auth().GetNode(ctx, "default", uuid)
 	require.NoError(t, err)
@@ -118,7 +121,7 @@ func TestAgentless(t *testing.T) {
 	compareCAFiles(t, ctx, server.Auth(), filepath.Join(keysDir, teleportOpenSSHCA))
 
 	rotate(ctx, t, server.Auth())
-	err = ag.openSSHInitialJoin(ctx, clf)
+	err = ag.openSSHJoin(ctx, clf)
 
 	require.NoError(t, err)
 	checkKeysExist(t, backupKeysDir)
@@ -131,7 +134,7 @@ func TestAgentless(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = ag.openSSHRotateStageRollback(ctx, clf)
+	err = ag.openSSHRollback(ctx, clf)
 	require.NoError(t, err)
 	checkKeysExist(t, keysDir)
 	_, err = os.Stat(backupKeysDir)

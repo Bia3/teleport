@@ -181,7 +181,7 @@ type CommandLineFlags struct {
 	OpenSSHConfigPath string
 	// OpenSSHKeysPath is the path to write teleport keys and certs into
 	OpenSSHKeysPath string
-	// OpenSSHKeysBackupPath is the path to write teleport keys and certs into after rotation
+	// OpenSSHKeysBackupPath is the path to which the previous Teleport keys and certificates are written.
 	OpenSSHKeysBackupPath string
 	// AdditionalPrincipals are a list of extra principals to include when generating host keys.
 	AdditionalPrincipals string
