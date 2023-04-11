@@ -302,7 +302,7 @@ func (s *sqsMessagesCollector) receiveMessages(ctx context.Context) ([]sqsMessag
 		MessageAttributeNames: []string{payloadTypeAttr},
 	})
 	if err != nil {
-		return nil, err
+		return nil, trace.Wrap(err)
 	}
 	if len(sqsOut.Messages) < 1 {
 		return out, nil
