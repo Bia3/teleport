@@ -50,11 +50,11 @@ architecture](../../img/deploy-a-cluster/teleport-ha-architecture.png)
 ## Layer 4 load balancers
 
 High-availability Teleport clusters require two load balancers:
-- A load balancer to receive traffic from outside the network where your
-  Teleport cluster is running and forward it to an available Proxy Service
-  instance. This load balancer handles TCP traffic from users and services in a
-  variety of application-layer protocols.
-- A load balancer to forward traffic from a Proxy Service instance to an
+- **Proxy Service load balancer:** A load balancer to receive traffic from
+  outside the network where your Teleport cluster is running and forward it to
+  an available Proxy Service instance. This load balancer handles TCP traffic
+  from users and services in a variety of application-layer protocols.
+- **Auth Service load balancer:** A load balancer to forward traffic from a Proxy Service instance to an
   available Auth Service instance. This handles TLS traffic to the Auth
   Service's gRPC endpoint.
 
@@ -66,12 +66,13 @@ We recommend configuring your load balancers to route traffic across multiple
 zones (if using a cloud provider) or data centers (if using an on-premise
 solution) to ensure availability. 
 
-{/* TODO: Update the TLS Routing section*/}
+### Configuring the Proxy Service load balancer
 
-### TLS Routing
+#### TLS Routing
 
-Your load balancer configuration depends on whether you will enable [TLS
-Routing](../management/operations/tls-routing.mdx) in your Teleport cluster.
+The way you configure the Proxy Service load balancer depends on whether you
+will enable [TLS Routing](../management/operations/tls-routing.mdx) in your
+Teleport cluster.
 
 With TLS Routing, the Teleport Proxy Service uses application-layer protocol
 negotiation (ALPN) to handle all communication with users and services via the
@@ -89,11 +90,12 @@ The approach we describe in this guide uses only a Layer 4 load balancer to
 minimize the infrastructure you will deploy, but users that require a separate
 load balancer for HTTPS traffic should disable TLS Routing.
 
-### Configuring the load balancer
+#### Open ports
 
-Configure the load balancer to forward traffic from the following ports on the
-load balancer to the corresponding port on an available Teleport instance. The
-configuration depends on whether you will enable TLS Routing:
+Configure the Proxy Service load balancer to forward traffic from the following
+ports on the load balancer to the corresponding port on an available Proxy
+Service instance. The configuration depends on whether you will enable TLS
+Routing:
 
 <Tabs>
 <TabItem label="TLS Routing">
@@ -124,6 +126,10 @@ services:
 
 </TabItem>
 </Tabs>
+
+### Configuring the Auth Service load balancer
+
+{/*TODO: See which ports we need*/}
 
 ## Cluster state backend
 
