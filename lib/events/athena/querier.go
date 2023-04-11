@@ -30,6 +30,8 @@ import (
 	"github.com/gravitational/trace"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/gravitational/teleport"
+
 	"github.com/gravitational/teleport/api/types"
 	apievents "github.com/gravitational/teleport/api/types/events"
 	"github.com/gravitational/teleport/lib/defaults"
@@ -58,14 +60,46 @@ type querierConfig struct {
 	workgroup               string
 	queryResultsS3          string
 	getQueryResultsInterval time.Duration
+
+	awsCfg   *aws.Config
+	logEntry *log.Entry
 }
 
-func newQuerier(cfg querierConfig, awsCfg aws.Config, log *log.Entry) *querier {
-	return &querier{
-		athenaCli:     athena.NewFromConfig(awsCfg),
-		querierConfig: cfg,
-		log:           log,
+func (cfg *querierConfig) CheckAndSetDefaults() error {
+	// Proper format of those fields is already validated in athena.Config.
+	// Here we just check if they were "wired" at all.
+	switch {
+	case cfg.tablename == "":
+		return trace.BadParameter("empty tablename in athena querier")
+	case cfg.database == "":
+		return trace.BadParameter("empty database in athena querier")
+	case cfg.queryResultsS3 == "":
+		return trace.BadParameter("empty queryResultsS3 in athena querier")
+	case cfg.getQueryResultsInterval == 0:
+		return trace.BadParameter("empty getQueryResultsInterval in athena querier")
+	case cfg.awsCfg == nil:
+		return trace.BadParameter("empty awsCfg in athena querier")
 	}
+
+	if cfg.logEntry == nil {
+		cfg.logEntry = log.WithFields(log.Fields{
+			trace.Component: teleport.ComponentAthena,
+		})
+	}
+
+	return nil
+}
+
+func newQuerier(cfg querierConfig) (*querier, error) {
+	err := cfg.CheckAndSetDefaults()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &querier{
+		athenaCli:     athena.NewFromConfig(*cfg.awsCfg),
+		querierConfig: cfg,
+		log:           cfg.logEntry,
+	}, nil
 }
 
 func (q *querier) SearchEvents(fromUTC, toUTC time.Time, namespace string,

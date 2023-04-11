@@ -322,13 +322,18 @@ func New(ctx context.Context, cfg Config) (*Log, error) {
 	// TODO(tobiaszheller): initialize publisher
 	// TODO(tobiaszheller): initialize batcher
 
-	l.querier = newQuerier(querierConfig{
+	l.querier, err = newQuerier(querierConfig{
 		tablename:               cfg.TableName,
 		database:                cfg.Database,
 		workgroup:               cfg.Workgroup,
 		queryResultsS3:          cfg.QueryResultsS3,
 		getQueryResultsInterval: cfg.GetQueryResultsInterval,
-	}, l.awsConfig, logEntry)
+		awsCfg:                  &l.awsConfig,
+		logEntry:                logEntry,
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
 
 	return l, nil
 }
