@@ -282,7 +282,7 @@ func (q *querier) waitForSuccess(ctx context.Context, queryId string) error {
 		case athenaTypes.QueryExecutionStateQueued, athenaTypes.QueryExecutionStateRunning:
 			continue
 		default:
-			return trace.Errorf("got unsupported state: %s", state)
+			return trace.Errorf("got unknown state: %s", state)
 		}
 	}
 }
