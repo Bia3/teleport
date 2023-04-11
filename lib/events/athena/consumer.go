@@ -57,7 +57,6 @@ const (
 // certain size or interval, and writes to s3 as parquet file.
 type consumer struct {
 	*log.Entry
-	sqsReceiver         sqsReceiver
 	backend             backend.Backend
 	storeLocationPrefix string
 	storeLocationBucket string
@@ -101,21 +100,20 @@ func newConsumer(cfg Config, awsCfg aws.Config, backend backend.Backend, logEntr
 		return nil, trace.Wrap(err)
 	}
 
-	s3cli := s3.NewFromConfig(awsCfg)
-	sqsCli := sqs.NewFromConfig(awsCfg)
+	s3client := s3.NewFromConfig(awsCfg)
+	sqsReceiver := sqs.NewFromConfig(awsCfg)
 	return &consumer{
 		Entry:               logEntry,
-		sqsReceiver:         sqsCli,
 		backend:             backend,
 		storeLocationPrefix: strings.TrimSuffix(strings.TrimPrefix(u.Path, "/"), "/"),
 		storeLocationBucket: u.Host,
 		batchMaxItems:       cfg.BatchMaxItems,
 		batchMaxInterval:    cfg.BatchMaxInterval,
 		collectConfig: sqsCollectConfig{
-			sqsReceiver: sqsCli,
+			sqsReceiver: sqsReceiver,
 			queueURL:    cfg.QueueURL,
 			// TODO(tobiaszheller): use s3 manager from teleport observability.
-			payloadDownloader:     manager.NewDownloader(s3cli),
+			payloadDownloader:     manager.NewDownloader(s3client),
 			payloadBucket:         largeEventsURL.Host,
 			visibilityTimeout:     int32(cfg.BatchMaxInterval.Seconds()),
 			waitOnReceiveTimeout:  int32(maxWaitTimeOnReceiveMessageFromSQS.Seconds()),
