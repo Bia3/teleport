@@ -376,7 +376,7 @@ func (rb *responseBuilder) appendUntilSizeLimit(resultResp *athena.GetQueryResul
 	}
 	for i, row := range resultResp.ResultSet.Rows {
 		if len(row.Data) != 3 {
-			return false, trace.Errorf("invalid number of row at response, got %d", len(row.Data))
+			return false, trace.BadParameter("invalid number of row at response, got %d", len(row.Data))
 		}
 		// GetQueryResults returns as first row header from CSV.
 		// We don't need it, so we will just ignore first row if it contains
