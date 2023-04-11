@@ -135,10 +135,7 @@ func (q *querier) searchEvents(ctx context.Context, fromUTC, toUTC time.Time, li
 	}
 
 	output, nextKey, err := q.fetchResults(ctx, queryId, limit, filter)
-	if err != nil {
-		return nil, "", trace.Wrap(err)
-	}
-	return output, nextKey, nil
+	return output, nextKey, trace.Wrap(err)
 }
 
 type searchEventsFilter struct {
