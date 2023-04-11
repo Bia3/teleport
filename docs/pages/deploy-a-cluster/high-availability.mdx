@@ -129,7 +129,24 @@ services:
 
 ### Configuring the Auth Service load balancer
 
-{/*TODO: See which ports we need*/}
+The Auth Service load balancer must forward traffic to the Auth Service's gRPC
+port. In this guide, we are assuming that you have configured the Auth Service
+load balancer to forward traffic from port `3025` to port `3025` on an available
+Auth Service instance. 
+
+It is also good practice to allow your teams to access Auth Service instances
+via Teleport. 
+
+If you are running your Teleport cluster on Kubernetes, you can configure your
+load balancer to forward traffic from port `3026` on the Auth Service load
+balancer to port `3026` on an Auth Service instance, which you can configure to
+run the Teleport Kubernetes Service as well in order to proxy traffic to the
+Auth Service pod.
+
+If you are running your Teleport cluster on virtual machines, you can open port
+`3022` on the Auth Service and forward traffic to it from the Auth Service load
+balancer. You can then run the Teleport SSH Service on your Auth Service hosts
+in order to allow secure access.
 
 ## Cluster state backend
 
@@ -274,6 +291,14 @@ records.
 </Admonition>
 
 ## Teleport instances
+
+{/*TODO: Edit the config/open ports instructions:
+
+- Separate Auth/Proxy pools
+- Run the SSH Service or Kubernetes Service on the Auth/Proxy instances so you
+  can access them
+
+-*/}
 
 Run the Teleport Auth Service and Proxy Service as a scalable group of compute
 resources, for example, a Kubernetes `Deployment` or AWS Auto Scaling group.
