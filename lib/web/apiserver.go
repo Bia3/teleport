@@ -710,6 +710,14 @@ func (h *Handler) bindDefaultEndpoints() {
 	h.PUT("/webapi/sites/:site/integrations/:name", h.WithClusterAuth(h.integrationsUpdate))
 	h.DELETE("/webapi/sites/:site/integrations/:name", h.WithClusterAuth(h.integrationsDelete))
 
+	// AWS OIDC Integration specific endpoints:
+	// Unauthenticated access to OpenID Configuration - used for AWS OIDC IdP integration
+	h.GET("/.well-known/openid-configuration", httplib.MakeHandler(h.openidConfiguration))
+	h.GET(OIDCJWKWPartialURI, httplib.MakeHandler(h.jwksOIDC))
+	h.GET("/testaws2", httplib.MakeHandler(h.integrationsExecute2))
+	h.GET("/testaws", h.WithClusterAuth(h.integrationsExecute))
+	// h.POST("/webapi/sites/:site/integrations/:name/action/:action", h.WithClusterAuth(h.integrationsExecute))
+
 	// Connection upgrades.
 	h.GET("/webapi/connectionupgrade", httplib.MakeHandler(h.connectionUpgrade))
 

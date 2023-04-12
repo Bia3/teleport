@@ -796,6 +796,9 @@ type ClientI interface {
 	// Implements ReadAccessPoint.
 	GetWebToken(ctx context.Context, req types.GetWebTokenRequest) (types.WebToken, error)
 
+	// GenerateAWSOIDCToken generates a JWT token for AWS OIDC Integration API call.
+	GenerateAWSOIDCToken(ctx context.Context, req types.GenerateAWSOIDCTokenRequest) (string, error)
+
 	// ResetAuthPreference resets cluster auth preference to defaults.
 	ResetAuthPreference(ctx context.Context) error
 

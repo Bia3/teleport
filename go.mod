@@ -33,6 +33,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.13.20
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.13.2
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.93.2
+	github.com/aws/aws-sdk-go-v2/service/rds v1.42.3
 	github.com/aws/aws-sdk-go-v2/service/sts v1.18.9
 	github.com/aws/aws-sigv4-auth-cassandra-gocql-driver-plugin v0.0.0-20220331165046-e4d000c0d6a6
 	github.com/beevik/etree v1.1.0
@@ -140,6 +141,7 @@ require (
 	golang.org/x/sys v0.7.0
 	golang.org/x/term v0.7.0
 	golang.org/x/text v0.9.0
+	golang.org/x/time v0.3.0
 	google.golang.org/api v0.114.0
 	google.golang.org/genproto v0.0.0-20230330154414-c0448cd141ea
 	google.golang.org/grpc v1.54.0
@@ -352,7 +354,6 @@ require (
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
-	golang.org/x/time v0.3.0 // indirect
 	golang.org/x/tools v0.6.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect

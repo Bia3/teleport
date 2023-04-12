@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 	"gopkg.in/square/go-jose.v2"
@@ -112,6 +113,15 @@ type SignParams struct {
 
 	// URI is the URI of the recipient application.
 	URI string
+
+	// Audience is the Audience for the Token.
+	Audience string
+
+	// Issuer is the issuer of the token.
+	Issuer string
+
+	// Subject is the system that is going to use the token.
+	Subject string
 }
 
 // Check verifies all the values are valid.
@@ -133,7 +143,7 @@ func (p *SignParams) Check() error {
 }
 
 // sign will return a signed JWT with the passed in claims embedded within.
-func (k *Key) sign(claims Claims) (string, error) {
+func (k *Key) sign(claims any) (string, error) {
 	return k.signAny(claims)
 }
 
@@ -185,6 +195,39 @@ func (k *Key) Sign(p SignParams) (string, error) {
 		Username: p.Username,
 		Roles:    p.Roles,
 		Traits:   p.Traits,
+	}
+
+	return k.sign(claims)
+}
+
+// awsOIDCCustomClaims defines the require claims for the JWT token used in AWS OIDC Integration.
+type awsOIDCCustomClaims struct {
+	jwt.Claims
+
+	// OnBehalfOf identifies the user that is started the request.
+	OnBehalfOf string `json:"obo,omitempty"`
+}
+
+// SignAWSOIDC signs a JWT with claims specific to AWS OIDC Integration.
+// Required Params:
+// - Username: stored as OnBehalfOf (obo) claim with `user:` prefix
+// - Issuer: stored as Issuer (iss) claim
+// - Subject: stored as Subject (sub) claim
+// - Audience: stored as Audience (aud) claim
+// - Expiries: stored as Expiry (exp) claim
+func (k *Key) SignAWSOIDC(p SignParams) (string, error) {
+	// Sign the claims and create a JWT token.
+	claims := awsOIDCCustomClaims{
+		OnBehalfOf: "user:" + p.Username,
+		Claims: jwt.Claims{
+			Issuer:    p.Issuer,
+			Subject:   p.Subject,
+			Audience:  jwt.Audience{p.Audience},
+			ID:        uuid.NewString(),
+			NotBefore: jwt.NewNumericDate(k.config.Clock.Now().Add(-10 * time.Second)),
+			Expiry:    jwt.NewNumericDate(p.Expires),
+			IssuedAt:  jwt.NewNumericDate(k.config.Clock.Now().Add(-10 * time.Second)),
+		},
 	}
 
 	return k.sign(claims)

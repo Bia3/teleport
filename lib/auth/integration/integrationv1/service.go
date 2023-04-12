@@ -18,16 +18,32 @@ package integrationv1
 
 import (
 	"context"
+	"time"
 
 	"github.com/gravitational/trace"
+	"github.com/jonboulle/clockwork"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	integrationpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/integration/v1"
 	"github.com/gravitational/teleport/api/types"
+	"github.com/gravitational/teleport/lib/auth/keystore"
 	"github.com/gravitational/teleport/lib/authz"
+	"github.com/gravitational/teleport/lib/jwt"
 	"github.com/gravitational/teleport/lib/services"
 )
+
+type CAGetter interface {
+	// GetDomainName returns local auth domain of the current auth server
+	GetDomainName() (string, error)
+
+	// GetCertAuthority returns certificate authority by given id. Parameter loadSigningKeys
+	// controls if signing keys are loaded
+	GetCertAuthority(ctx context.Context, id types.CertAuthID, loadSigningKeys bool) (types.CertAuthority, error)
+
+	// GetKeyStore returns the KeyStore used by the auth server
+	GetKeyStore() *keystore.Manager
+}
 
 // ServiceConfig holds configuration options for
 // the Integration gRPC service.
@@ -35,7 +51,9 @@ type ServiceConfig struct {
 	Authorizer authz.Authorizer
 	Cache      services.IntegrationsGetter
 	Backend    services.Integrations
+	CAGetter   CAGetter
 	Logger     *logrus.Entry
+	Clock      clockwork.Clock
 }
 
 // CheckAndSetDefaults checks the ServiceConfig fields and returns an error if
@@ -54,8 +72,16 @@ func (s *ServiceConfig) CheckAndSetDefaults() error {
 		return trace.BadParameter("authorizer is required")
 	}
 
+	if s.CAGetter == nil {
+		return trace.BadParameter("ca getter is required")
+	}
+
 	if s.Logger == nil {
 		s.Logger = logrus.WithField(trace.Component, "integrations.service")
+	}
+
+	if s.Clock == nil {
+		s.Clock = clockwork.NewRealClock()
 	}
 
 	return nil
@@ -67,7 +93,9 @@ type Service struct {
 	authorizer authz.Authorizer
 	cache      services.IntegrationsGetter
 	backend    services.Integrations
+	caGetter   CAGetter
 	logger     *logrus.Entry
+	clock      clockwork.Clock
 }
 
 // NewService returns a new Integrations gRPC service.
@@ -81,6 +109,8 @@ func NewService(cfg *ServiceConfig) (*Service, error) {
 		authorizer: cfg.Authorizer,
 		cache:      cfg.Cache,
 		backend:    cfg.Backend,
+		caGetter:   cfg.CAGetter,
+		clock:      cfg.Clock,
 	}, nil
 }
 
@@ -198,4 +228,52 @@ func (s *Service) DeleteAllIntegrations(ctx context.Context, _ *integrationpb.De
 	}
 
 	return &emptypb.Empty{}, nil
+}
+
+// GenerateAWSOIDCToken creates a JWT token to be used by an AWS OIDC integration.
+func (s *Service) GenerateAWSOIDCToken(ctx context.Context, req *integrationpb.GenerateAWSOIDCTokenRequest) (*integrationpb.GenerateAWSOIDCTokenResponse, error) {
+	_, err := authz.AuthorizeWithVerbs(ctx, s.logger, s.authorizer, true, types.KindIntegration, types.VerbUse)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	// Get the clusters CA.
+	clusterName, err := s.caGetter.GetDomainName()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	ca, err := s.caGetter.GetCertAuthority(ctx, types.CertAuthID{
+		Type:       types.OIDCIdPCA,
+		DomainName: clusterName,
+	}, true)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	// Extract the JWT signing key and sign the claims.
+	signer, err := s.caGetter.GetKeyStore().GetOIDCIdPSigner(ctx, ca)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	privateKey, err := services.GetJWTSigner(signer, ca.GetClusterName(), s.clock)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	token, err := privateKey.SignAWSOIDC(jwt.SignParams{
+		Username: "username",
+		Audience: "discover.teleport",
+		Issuer:   req.Issuer,
+		Expires:  s.clock.Now().Add(time.Minute),
+		Subject:  "subject",
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return &integrationpb.GenerateAWSOIDCTokenResponse{
+		Token: token,
+	}, nil
 }

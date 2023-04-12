@@ -207,6 +207,23 @@ func (m *Manager) GetJWTSigner(ctx context.Context, ca types.CertAuthority) (cry
 	return nil, trace.NotFound("no usable JWT key pairs found")
 }
 
+// GetOIDCIdPSigner selects a usable JWT keypair from the given keySet and returns
+// a [crypto.Signer] usable to sign OIDC IdP JWT tokens.
+func (m *Manager) GetOIDCIdPSigner(ctx context.Context, ca types.CertAuthority) (crypto.Signer, error) {
+	for _, keyPair := range ca.GetActiveKeys().JWT {
+		canSign, err := m.backend.canSignWithKey(ctx, keyPair.PrivateKey, keyPair.PrivateKeyType)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+		if !canSign {
+			continue
+		}
+		signer, err := m.backend.getSigner(ctx, keyPair.PrivateKey)
+		return signer, trace.Wrap(err)
+	}
+	return nil, trace.NotFound("no usable JWT key pairs found")
+}
+
 // NewSSHKeyPair generates a new SSH keypair in the keystore backend and returns it.
 func (m *Manager) NewSSHKeyPair(ctx context.Context) (*types.SSHKeyPair, error) {
 	// The default hash length for SSH signers is 512 bits.

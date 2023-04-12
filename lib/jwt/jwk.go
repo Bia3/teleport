@@ -38,6 +38,15 @@ type JWK struct {
 	N string `json:"n"`
 	// E is the exponent of the public key.
 	E string `json:"e"`
+	// Use identifies the intended use of the public key.
+	// This field is required for the AWS OIDC Integration.
+	// https://www.rfc-editor.org/rfc/rfc7517#section-4.2
+	Use string `json:"use"`
+	// KeyID identifies the key to use.
+	// This field is required for the AWS OIDC Integration.
+	// It might be empty.
+	// https://www.rfc-editor.org/rfc/rfc7517#section-4.5
+	KeyID string `json:"kid"`
 }
 
 // MarshalJWK will marshal a supported public key into JWK format.
@@ -58,6 +67,8 @@ func MarshalJWK(bytes []byte) (JWK, error) {
 		Algorithm: string(defaults.ApplicationTokenAlgorithm),
 		N:         base64.RawURLEncoding.EncodeToString(publicKey.N.Bytes()),
 		E:         base64.RawURLEncoding.EncodeToString(big.NewInt(int64(publicKey.E)).Bytes()),
+		Use:       defaults.JWTUse,
+		KeyID:     "",
 	}, nil
 }
 
