@@ -2895,4 +2895,10 @@ service AuthService {
 
   // UpdateHeadlessAuthenticationState is a request to update a headless authentication's state.
   rpc UpdateHeadlessAuthenticationState(UpdateHeadlessAuthenticationStateRequest) returns (google.protobuf.Empty);
+
+  // CreatePlugin creates a plugin resource.
+  rpc CreatePlugin(types.PluginV1) returns (google.protobuf.Empty);
+
+  // DeletePlugins deletes a plugin resource.
+  rpc DeletePlugin(types.ResourceRequest) returns (google.protobuf.Empty);
 }

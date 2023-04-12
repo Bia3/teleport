@@ -472,7 +472,7 @@ func (c *Client) OktaClient() services.Okta {
 }
 
 func (c *Client) CreatePlugin(ctx context.Context, plugin types.Plugin) error {
-	return trace.NotImplemented(notImplementedMessage)
+	return c.APIClient.CreatePlugin(ctx, plugin)
 }
 
 func (c *Client) DeleteAllPlugins(ctx context.Context) error {
@@ -480,7 +480,7 @@ func (c *Client) DeleteAllPlugins(ctx context.Context) error {
 }
 
 func (c *Client) DeletePlugin(ctx context.Context, name string) error {
-	return trace.NotImplemented(notImplementedMessage)
+	return c.APIClient.DeletePlugin(ctx, name)
 }
 
 func (c *Client) GetPlugin(ctx context.Context, name string, withSecrets bool) (types.Plugin, error) {

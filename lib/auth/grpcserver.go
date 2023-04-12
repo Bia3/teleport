@@ -4901,6 +4901,24 @@ func (g *GRPCServer) GetHeadlessAuthentication(ctx context.Context, req *proto.G
 	return authReq, trace.Wrap(err)
 }
 
+// CreatePlugin creates a plugin resource.
+func (g *GRPCServer) CreatePlugin(ctx context.Context, plugin *types.PluginV1) (*emptypb.Empty, error) {
+	auth, err := g.authenticate(ctx)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return nil, trace.Wrap(auth.CreatePlugin(ctx, plugin))
+}
+
+// DeletePlugin deletes a plugin resource.
+func (g *GRPCServer) DeletePlugin(ctx context.Context, req *types.ResourceRequest) (*emptypb.Empty, error) {
+	auth, err := g.authenticate(ctx)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return nil, trace.Wrap(auth.DeletePlugin(ctx, req.Name))
+}
+
 // GetBackend returns the backend from the underlying auth server.
 func (g *GRPCServer) GetBackend() backend.Backend {
 	return g.AuthServer.bk

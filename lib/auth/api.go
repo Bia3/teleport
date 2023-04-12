@@ -1216,6 +1216,7 @@ func (w *DiscoveryWrapper) Close() error {
 	return trace.NewAggregate(err, err2)
 }
 
+// PluginsWrapper is a wrapper around the API used to read plugin resources
 type PluginsWrapper struct {
 	ReadPluginsAccessPoint
 	accessPoint
