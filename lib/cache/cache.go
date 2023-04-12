@@ -575,18 +575,6 @@ func (r *readGuard[_]) IsCacheRead() bool {
 	return r.release != nil
 }
 
-type confirmedKindKey struct {
-	kind    string
-	subkind string
-}
-
-func (k confirmedKindKey) String() string {
-	if k.subkind == "" {
-		return k.kind
-	}
-	return fmt.Sprintf("%s/%s", k.kind, k.subkind)
-}
-
 // Config defines cache configuration parameters
 type Config struct {
 	// target is an identifying string that allows errors to
